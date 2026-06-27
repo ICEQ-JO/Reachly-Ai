@@ -8,6 +8,7 @@ import Link from "next/link";
 import { Globe, MessageCircle, TrendingUp, Zap, ArrowRight, Calendar, MessageSquare, Archive, Megaphone } from "lucide-react";
 import { Instagram } from "@/components/icons/Instagram";
 import { TrendChart } from "@/components/charts/TrendChart";
+import { publishDueDrafts } from "@/lib/b2c/scheduler";
 
 function weeklyBuckets(n: number) {
   const now = new Date();
@@ -31,6 +32,9 @@ export default async function B2cDashboardPage() {
     orderBy: (p) => [desc(p.createdAt)],
   });
   if (!product) redirect("/onboarding");
+
+  // Auto-publish any scheduled posts whose time has arrived.
+  await publishDueDrafts(product.id);
 
   const [[draftStats], recentCampaigns, recentRuns, postedDrafts] = await Promise.all([
     db.select({

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Globe, MessageCircle, Plus, X, ChevronLeft, ChevronRight } from "lucide-react";
 import { Instagram } from "@/components/icons/Instagram";
 import { toast } from "sonner";
+import { slotToDate } from "@/lib/b2c/planner";
 
 type Draft = {
   id: string;
@@ -86,7 +87,7 @@ export function ScheduleCalendar({ drafts: initialDrafts }: Props) {
       const res = await fetch(`/api/drafts/${draft.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "scheduled", scheduledDay: day, scheduledTime: timeToUse }),
+        body: JSON.stringify({ status: "scheduled", scheduledDay: day, scheduledTime: timeToUse, scheduledAt: slotToDate(day, timeToUse).toISOString() }),
       });
 
       if (res.ok) {
@@ -111,7 +112,7 @@ export function ScheduleCalendar({ drafts: initialDrafts }: Props) {
     const res = await fetch(`/api/drafts/${draftId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: "scheduled", scheduledDay: day, scheduledTime: time }),
+      body: JSON.stringify({ status: "scheduled", scheduledDay: day, scheduledTime: time, scheduledAt: slotToDate(day, time).toISOString() }),
     });
     if (res.ok) {
       setDrafts(prev => prev.map(d => d.id === draftId ? { ...d, status: "scheduled", scheduledDay: day, scheduledTime: time } : d));

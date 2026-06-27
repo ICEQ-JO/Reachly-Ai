@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { products, drafts } from "@/lib/db/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { ScheduleCalendar } from "./ScheduleCalendar";
+import { publishDueDrafts } from "@/lib/b2c/scheduler";
 
 export default async function SchedulePage() {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -16,6 +17,9 @@ export default async function SchedulePage() {
     orderBy: (p) => [desc(p.createdAt)],
   });
   if (!product) redirect("/onboarding");
+
+  // Auto-publish any scheduled posts whose time has arrived.
+  await publishDueDrafts(product.id);
 
   const allDrafts = await db.select({
     id: drafts.id,

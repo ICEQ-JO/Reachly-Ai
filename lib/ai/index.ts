@@ -1,5 +1,6 @@
 import { createOpenAI } from "@ai-sdk/openai";
 import { generateText } from "ai";
+import type { CampaignBrief, DistributionPlan, ContentPlan, ContentPiece } from "@/lib/b2c/types";
 
 const openrouter = createOpenAI({
   baseURL: "https://openrouter.ai/api/v1",
@@ -135,5 +136,92 @@ Return JSON: { "body": "facebook post text" }`,
     return JSON.parse(clean);
   } catch {
     return { body: text };
+  }
+}
+
+/**
+ * One-shot B2C marketing plan: a SINGLE LLM call that produces a cohesive
+ * ContentPlan + one ContentPiece per distribution slot (what & why). Platforms are
+ * taken authoritatively from the deterministic plan; on any parse failure we fall
+ * back to per-slot generateContent() so the pipeline never hard-fails.
+ */
+export async function generateB2cContentPlan(brief: CampaignBrief, plan: DistributionPlan): Promise<ContentPlan> {
+  const slotList = plan.slots
+    .map((s, i) => `${i + 1}. ${s.platform} — scheduled ${s.scheduledDay} ${s.scheduledTime}`)
+    .join("\n");
+
+  const prompt = `Create ONE cohesive social content plan for this brand, then write every post.
+
+BRAND
+Name: ${brief.productName}
+Description: ${brief.description}
+Niche: ${brief.niche || "n/a"}
+Offering: ${brief.offering || "n/a"}
+Target customer: ${brief.targetCustomer || "general consumers"}
+Tone: ${brief.tone || "casual and engaging"}
+Keywords: ${(brief.keywords || []).join(", ") || "n/a"}
+
+POSTING SCHEDULE — write exactly one post per line, in this order:
+${slotList}
+
+Rules:
+- Platform-native copy: Instagram = punchy caption + hashtags; Facebook = friendly + a question; Reddit = value-first, non-spammy, with a title.
+- Each post needs a one-sentence "rationale" (why this post, this channel, advances the plan).
+- "imageQuery" = 2-4 words to find a relevant photo.
+
+Return ONLY JSON:
+{
+  "theme": "the campaign through-line",
+  "summary": "2-sentence strategy summary",
+  "pieces": [
+    { "platform": "instagram|facebook|reddit", "body": "...", "subject": "reddit title or empty", "hashtags": "#a #b or empty", "rationale": "...", "imageQuery": "..." }
+  ]
+}
+"pieces" MUST have exactly ${plan.slots.length} items, one per scheduled line, same order.`;
+
+  try {
+    const { text } = await generateText({
+      model,
+      system: "You are an expert social media strategist and copywriter. Respond with valid JSON only.",
+      prompt,
+    });
+    const clean = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+    const parsed = JSON.parse(clean) as ContentPlan;
+    if (!Array.isArray(parsed.pieces) || parsed.pieces.length === 0) throw new Error("empty pieces");
+
+    const pieces: ContentPiece[] = plan.slots.map((slot, i) => {
+      const p = parsed.pieces[i] ?? parsed.pieces[parsed.pieces.length - 1];
+      return {
+        platform: slot.platform, // plan is authoritative for where
+        body: p?.body ?? "",
+        subject: p?.subject || undefined,
+        hashtags: p?.hashtags || undefined,
+        rationale: p?.rationale ?? "",
+        imageQuery: p?.imageQuery || brief.niche || brief.productName,
+      };
+    });
+    return { theme: parsed.theme ?? brief.productName, summary: parsed.summary ?? "", pieces };
+  } catch {
+    // Fallback: per-slot generation with the existing single-post generator.
+    const product: ProductInfo = {
+      name: brief.productName, description: brief.description, niche: brief.niche,
+      offering: brief.offering, tone: brief.tone, targetCustomer: brief.targetCustomer,
+      keywords: brief.keywords, audience: "b2c",
+    };
+    const pieces = await Promise.all(plan.slots.map(async (slot): Promise<ContentPiece> => {
+      const r = await generateContent({ channel: slot.platform, product, extra: brief.strategies?.[slot.platform] ?? null });
+      return {
+        platform: slot.platform,
+        body: r.body,
+        subject: r.subject,
+        rationale: `Maintains a consistent ${slot.platform} presence for ${brief.productName}.`,
+        imageQuery: brief.niche || brief.offering || brief.productName,
+      };
+    }));
+    return {
+      theme: brief.niche || brief.productName,
+      summary: `Organic ${brief.tone || "on-brand"} content across ${brief.platforms.join(", ")}.`,
+      pieces,
+    };
   }
 }

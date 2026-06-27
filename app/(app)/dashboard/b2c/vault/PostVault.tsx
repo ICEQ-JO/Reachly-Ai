@@ -8,6 +8,7 @@ import { RedditCard } from "@/components/posts/RedditCard";
 import { Globe, MessageCircle, Filter, Heart, Eye, Share2, MessageSquare, Flame, CheckCheck, CalendarClock } from "lucide-react";
 import { Instagram } from "@/components/icons/Instagram";
 import { toast } from "sonner";
+import { slotToDate } from "@/lib/b2c/planner";
 
 type Draft = {
   id: string;
@@ -21,8 +22,22 @@ type Draft = {
   engagements: { likes: number; comments: number; shares: number; reach: number } | null;
   scheduledDay: string | null;
   scheduledTime: string | null;
+  scheduledAt?: string | Date | null;
+  rationale?: string | null;
   createdAt: Date;
 };
+
+// Client-side mock engagement for the "Publish now" action (mirrors the server tick).
+function mockEngagement(platform: string) {
+  const R: Record<string, [number, number][]> = {
+    instagram: [[180, 2600], [12, 150], [8, 90], [3000, 42000]],
+    facebook:  [[60, 720], [8, 110], [10, 130], [1800, 22000]],
+    reddit:    [[40, 480], [15, 240], [0, 0], [0, 0]],
+  };
+  const [l, c, s, r] = R[platform] ?? R.instagram;
+  const pick = ([min, max]: [number, number]) => Math.floor(min + Math.random() * (max - min));
+  return { likes: pick(l), comments: pick(c), shares: pick(s), reach: pick(r) };
+}
 
 type Campaign = { id: string; name: string };
 
@@ -44,7 +59,7 @@ const PLATFORM_COLORS: Record<string, string> = {
   reddit:    "#ff4500",
 };
 
-const STATUS_OPTIONS = ["all", "draft", "approved", "scheduled", "sent"];
+const STATUS_OPTIONS = ["all", "draft", "approved", "scheduled", "posted"];
 const PLATFORM_OPTIONS = ["all", "instagram", "facebook", "reddit"];
 
 // Slots used to spread posts when scheduling them all at once (match the calendar grid).
@@ -76,15 +91,36 @@ export function PostVault({ drafts: initialDrafts, campaigns, selectedCampaign }
     setDrafts(prev => prev.map(d => d.id === id ? { ...d, body, subject: subject ?? d.subject } : d));
   }
 
+  // Approve = confirm the proposed schedule → enters the auto-publish queue.
+  function scheduleAtFor(d: Draft): string | undefined {
+    if (d.scheduledAt) return undefined; // already set at generation
+    if (d.scheduledDay && d.scheduledTime) return slotToDate(d.scheduledDay, d.scheduledTime).toISOString();
+    return undefined;
+  }
+
   async function handleApprove(id: string) {
+    const d = drafts.find((x) => x.id === id);
+    const payload: Record<string, unknown> = { status: "scheduled" };
+    if (d) { const at = scheduleAtFor(d); if (at) payload.scheduledAt = at; }
     const res = await fetch(`/api/drafts/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: "approved" }),
+      method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
     });
     if (res.ok) {
-      setDrafts(prev => prev.map(d => d.id === id ? { ...d, status: "approved" } : d));
-      toast.success("Post approved!");
+      setDrafts(prev => prev.map(d => d.id === id ? { ...d, status: "scheduled" } : d));
+      toast.success("Approved & scheduled — it'll auto-publish when due.");
+    }
+  }
+
+  async function handlePublish(id: string) {
+    const d = drafts.find((x) => x.id === id);
+    const eng = mockEngagement((d?.platform ?? d?.channel) ?? "instagram");
+    const res = await fetch(`/api/drafts/${id}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "posted", postedAt: new Date().toISOString(), engagements: eng }),
+    });
+    if (res.ok) {
+      setDrafts(prev => prev.map(d => d.id === id ? { ...d, status: "posted", engagements: eng } : d));
+      toast.success("Published! 🎉");
     }
   }
 
@@ -100,15 +136,17 @@ export function PostVault({ drafts: initialDrafts, campaigns, selectedCampaign }
     setBulkBusy(true);
     const done = new Set<string>();
     for (const d of targets) {
+      const payload: Record<string, unknown> = { status: "scheduled" };
+      const at = scheduleAtFor(d); if (at) payload.scheduledAt = at;
       const res = await fetch(`/api/drafts/${d.id}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "approved" }),
+        body: JSON.stringify(payload),
       });
       if (res.ok) done.add(d.id);
     }
-    setDrafts((prev) => prev.map((d) => done.has(d.id) ? { ...d, status: "approved" } : d));
+    setDrafts((prev) => prev.map((d) => done.has(d.id) ? { ...d, status: "scheduled" } : d));
     setBulkBusy(false);
-    toast.success(`Approved ${done.size} post${done.size !== 1 ? "s" : ""}!`);
+    toast.success(`Approved & scheduled ${done.size} post${done.size !== 1 ? "s" : ""}!`);
   }
 
   async function handleScheduleAll() {
@@ -122,7 +160,7 @@ export function PostVault({ drafts: initialDrafts, campaigns, selectedCampaign }
       const time = SCHED_TIMES[Math.floor(i / SCHED_DAYS.length) % SCHED_TIMES.length];
       const res = await fetch(`/api/drafts/${d.id}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "scheduled", scheduledDay: day, scheduledTime: time }),
+        body: JSON.stringify({ status: "scheduled", scheduledDay: day, scheduledTime: time, scheduledAt: slotToDate(day, time).toISOString() }),
       });
       if (res.ok) updates[d.id] = { day, time };
     }
@@ -144,7 +182,7 @@ export function PostVault({ drafts: initialDrafts, campaigns, selectedCampaign }
 
   function renderCard(draft: Draft) {
     const platform = (draft.platform ?? draft.channel) as "instagram" | "facebook" | "reddit";
-    const props = { draft, onSave: handleSave, onApprove: handleApprove, onSchedule: handleSchedule };
+    const props = { draft, onSave: handleSave, onApprove: handleApprove, onSchedule: handleSchedule, onPublish: handlePublish };
     if (platform === "instagram") return <InstagramCard {...props} />;
     if (platform === "facebook") return <FacebookCard {...props} />;
     if (platform === "reddit") return <RedditCard {...props} onSave={(id, body, subj) => handleSave(id, body, subj)} />;

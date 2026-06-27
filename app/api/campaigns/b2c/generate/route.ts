@@ -4,8 +4,10 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { products, campaigns, drafts, agentRuns } from "@/lib/db/schema";
 import { eq, and, desc } from "drizzle-orm";
-import { generateContent } from "@/lib/ai";
+import { generateB2cContentPlan } from "@/lib/ai";
 import { searchPexelsImages } from "@/lib/pexels";
+import { planDistribution } from "@/lib/b2c/planner";
+import type { CampaignBrief, B2cPlatform } from "@/lib/b2c/types";
 
 const PHOTO_POOL = [
   {
@@ -131,68 +133,73 @@ export async function POST(request: Request) {
   }).returning();
 
   try {
-    const count = postCount && postCount > 0 ? postCount : 3;
-    const tasks: { platform: string; index: number }[] = [];
-    for (const platform of platforms) {
-      for (let i = 0; i < count; i++) {
-        tasks.push({ platform, index: i });
-      }
-    }
+    // 1. CampaignBrief from the product + request.
+    const brief: CampaignBrief = {
+      productName: product.name,
+      description: product.description ?? "",
+      niche: product.niche ?? "",
+      offering: product.offering ?? "",
+      tone: product.tone ?? "",
+      targetCustomer: product.targetCustomer ?? "",
+      keywords: product.keywords ?? [],
+      platforms: platforms.filter((p): p is B2cPlatform => ["instagram", "facebook", "reddit"].includes(p)),
+      postCount: postCount && postCount > 0 ? postCount : 3,
+      intensity: product.intensity ?? "steady",
+      mediaType: mediaType || "mixed",
+      strategies: strategies ?? {},
+    };
 
-    // Generate content in parallel for all platform posts
-    const results = await Promise.allSettled(
-      tasks.map(({ platform, index }) =>
-        generateContent({
-          channel: platform as "instagram" | "facebook" | "reddit",
-          product,
-          extra: {
-            ...strategies[platform],
-            postIndex: `${index + 1} of ${count}`,
-            mediaType: mediaType || "mixed",
-          },
-        })
-      )
+    // 2. Deterministic distribution plan (where & when).
+    const plan = planDistribution(brief);
+
+    // 3. ONE LLM call → ContentPlan + ContentPiece[] (what & why).
+    const contentPlan = await generateB2cContentPlan(brief, plan);
+
+    // 4. Relevant imagery: Pexels pool → Unsplash placeholder fallback.
+    const queryBase = [product.niche, product.offering, product.name].filter(Boolean).join(" ").trim();
+    const pexelsPool = await searchPexelsImages(
+      queryBase || contentPlan.pieces[0]?.imageQuery || "lifestyle brand",
+      plan.slots.length + 4,
     );
 
-    // Pull a pool of real, relevant images from Pexels based on the product.
-    // Falls back to the Unsplash placeholder pool when Pexels is unavailable.
-    const imageQuery = [product.niche, product.offering, product.name]
-      .filter(Boolean).join(" ").trim();
-    const pexelsPool = await searchPexelsImages(imageQuery || "lifestyle brand", tasks.length + 4);
-
-    const toInsert: typeof drafts.$inferInsert[] = [];
-
-    results.forEach((result, idx) => {
-      const task = tasks[idx];
-      const platform = task.platform;
-      if (result.status === "fulfilled") {
-        const mediaUrl = pexelsPool.length > 0
-          ? pexelsPool[idx % pexelsPool.length]
-          : getMockImageForProduct(product, idx);
-        toInsert.push({
-          productId: product.id,
-          campaignId: campaign.id,
-          channel: platform,
-          platform,
-          body: result.value.body,
-          subject: result.value.subject ?? null,
-          status: "draft",
-          mediaUrl,
-          engagements: { likes: 0, comments: 0, shares: 0, reach: 0 },
-        });
-      }
+    // 5. One draft per slot — status "draft", with proposed schedule + rationale (in imagePrompt).
+    const toInsert: typeof drafts.$inferInsert[] = plan.slots.map((slot, idx) => {
+      const piece = contentPlan.pieces[idx];
+      const mediaUrl = pexelsPool.length > 0 ? pexelsPool[idx % pexelsPool.length] : getMockImageForProduct(product, idx);
+      const body = piece.hashtags ? `${piece.body}\n\n${piece.hashtags}` : piece.body;
+      return {
+        productId: product.id,
+        campaignId: campaign.id,
+        channel: slot.platform,
+        platform: slot.platform,
+        body,
+        subject: piece.subject ?? null,
+        status: "draft",
+        scheduledAt: slot.scheduledAt,
+        scheduledDay: slot.scheduledDay,
+        scheduledTime: slot.scheduledTime,
+        imagePrompt: piece.rationale, // reuse imagePrompt to store the "why"
+        mediaUrl,
+        engagements: { likes: 0, comments: 0, shares: 0, reach: 0 },
+      };
     });
 
-    if (toInsert.length > 0) {
-      await db.insert(drafts).values(toInsert);
-    }
+    if (toInsert.length > 0) await db.insert(drafts).values(toInsert);
+
+    // 6. Persist the content plan on the campaign (jsonb settings, no schema change).
+    await db.update(campaigns).set({
+      settings: {
+        ...strategies, postCount: brief.postCount, mediaType: brief.mediaType,
+        contentPlan: { theme: contentPlan.theme, summary: contentPlan.summary, cadence: plan.cadence },
+      },
+    }).where(eq(campaigns.id, campaign.id));
 
     await db.update(agentRuns).set({
       status: "succeeded",
-      output: { draftsGenerated: toInsert.length, platforms },
+      output: { draftsGenerated: toInsert.length, platforms, theme: contentPlan.theme },
     }).where(eq(agentRuns.id, run.id));
 
-    return NextResponse.json({ ok: true, campaignId: campaign.id, draftsGenerated: toInsert.length });
+    return NextResponse.json({ ok: true, campaignId: campaign.id, draftsGenerated: toInsert.length, theme: contentPlan.theme });
   } catch (err) {
     await db.update(agentRuns).set({ status: "failed", output: { error: String(err) } })
       .where(eq(agentRuns.id, run.id));

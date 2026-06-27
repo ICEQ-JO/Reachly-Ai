@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { products, drafts, campaigns } from "@/lib/db/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { PostVault } from "./PostVault";
+import { publishDueDrafts } from "@/lib/b2c/scheduler";
 
 export default async function B2cVaultPage({ searchParams }: { searchParams: Promise<{ campaign?: string }> }) {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -19,6 +20,9 @@ export default async function B2cVaultPage({ searchParams }: { searchParams: Pro
   });
   if (!product) redirect("/onboarding");
 
+  // Auto-publish any scheduled posts whose time has arrived.
+  await publishDueDrafts(product.id);
+
   const [allDrafts, allCampaigns] = await Promise.all([
     db.select({
       id: drafts.id,
@@ -32,6 +36,8 @@ export default async function B2cVaultPage({ searchParams }: { searchParams: Pro
       engagements: drafts.engagements,
       scheduledDay: drafts.scheduledDay,
       scheduledTime: drafts.scheduledTime,
+      scheduledAt: drafts.scheduledAt,
+      rationale: drafts.imagePrompt,
       createdAt: drafts.createdAt,
     }).from(drafts)
       .where(eq(drafts.productId, product.id))

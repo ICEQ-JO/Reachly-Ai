@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Globe, ThumbsUp, MessageCircle, Share2, MoreHorizontal } from "lucide-react";
+import { Globe, ThumbsUp, MessageCircle, Share2, MoreHorizontal, Lightbulb } from "lucide-react";
 
 interface Props {
   draft: {
@@ -9,6 +9,7 @@ interface Props {
     body: string;
     status: string;
     mediaUrl?: string | null;
+    rationale?: string | null;
     engagements?: { likes: number; comments: number; shares: number; reach: number } | null;
     scheduledDay?: string | null;
     scheduledTime?: string | null;
@@ -16,11 +17,12 @@ interface Props {
   onSave?: (id: string, body: string) => void;
   onApprove?: (id: string) => void;
   onSchedule?: (id: string) => void;
+  onPublish?: (id: string) => void;
 }
 
 const REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "😡"];
 
-export function FacebookCard({ draft, onSave, onApprove, onSchedule }: Props) {
+export function FacebookCard({ draft, onSave, onApprove, onSchedule, onPublish }: Props) {
   const [body, setBody] = useState(draft.body);
   const [editing, setEditing] = useState(false);
   const [reaction, setReaction] = useState<string | null>(null);
@@ -127,13 +129,24 @@ export function FacebookCard({ draft, onSave, onApprove, onSchedule }: Props) {
         </button>
       </div>
 
+      {/* Why this post */}
+      {draft.rationale && (
+        <div style={{ padding: "8px 14px", borderTop: "1px solid var(--border)", display: "flex", gap: "6px", alignItems: "flex-start" }}>
+          <Lightbulb size={12} color="var(--accent)" style={{ flexShrink: 0, marginTop: "2px" }} />
+          <span style={{ fontSize: "11px", color: "var(--fg-muted)", lineHeight: 1.4 }}><b style={{ color: "var(--fg)" }}>Why:</b> {draft.rationale}</span>
+        </div>
+      )}
+
       {/* Status + Actions */}
       <div style={{ padding: "10px 14px", borderTop: "1px solid var(--border)", background: "var(--bg-subtle)", display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
-        <span className={`badge badge-${draft.status === "approved" ? "green" : draft.status === "scheduled" ? "blue" : "gray"}`}>{draft.status}</span>
-        {draft.scheduledDay && <span style={{ fontSize: "10px", color: "var(--fg-muted)" }}>{draft.scheduledDay} {draft.scheduledTime}</span>}
+        <span className={`badge badge-${draft.status === "posted" ? "green" : draft.status === "scheduled" ? "blue" : draft.status === "approved" ? "green" : "gray"}`}>{draft.status === "posted" ? "● Live" : draft.status}</span>
+        {draft.scheduledDay && draft.status !== "posted" && <span style={{ fontSize: "10px", color: "var(--fg-muted)" }}>{draft.scheduledDay} {draft.scheduledTime}</span>}
         <div style={{ marginLeft: "auto", display: "flex", gap: "6px" }}>
           {draft.status === "draft" && (
             <button className="btn btn-primary" style={{ padding: "4px 10px", fontSize: "11px" }} onClick={() => onApprove?.(draft.id)}>Approve</button>
+          )}
+          {draft.status === "scheduled" && (
+            <button className="btn btn-primary" style={{ padding: "4px 10px", fontSize: "11px" }} onClick={() => onPublish?.(draft.id)}>Publish now</button>
           )}
           {(draft.status === "draft" || draft.status === "approved") && (
             <button className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: "11px" }} onClick={() => onSchedule?.(draft.id)}>Schedule</button>
