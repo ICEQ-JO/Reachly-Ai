@@ -74,6 +74,8 @@ export function FacebookCard({ draft, onSave, onApprove, onSchedule }: Props) {
           <img
             src={draft.mediaUrl}
             alt="Facebook post content"
+            loading="lazy"
+            decoding="async"
             style={{ width: "100%", height: "100%", objectFit: "cover" }}
           />
         ) : (

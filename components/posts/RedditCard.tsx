@@ -102,6 +102,8 @@ export function RedditCard({ draft, onSave, onApprove, onSchedule }: Props) {
               <img
                 src={draft.mediaUrl}
                 alt="Reddit post content"
+                loading="lazy"
+                decoding="async"
                 style={{ width: "100%", height: "auto", maxHeight: "300px", objectFit: "contain", display: "block" }}
               />
             </div>

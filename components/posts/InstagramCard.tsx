@@ -51,6 +51,8 @@ export function InstagramCard({ draft, onSave, onApprove, onSchedule }: Props) {
           <img
             src={draft.mediaUrl}
             alt="Instagram post content"
+            loading="lazy"
+            decoding="async"
             style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
           />
         ) : (
