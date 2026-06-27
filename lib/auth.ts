@@ -17,5 +17,13 @@ export const auth = betterAuth({
     enabled: true,
     requireEmailVerification: false,
   },
-  trustedOrigins: [process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"],
+  trustedOrigins: [
+    process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
+    ...(process.env.BETTER_AUTH_URL ? [process.env.BETTER_AUTH_URL] : []),
+    // Vercel-provided deployment URLs (no protocol), so preview + prod origins are trusted.
+    ...(process.env.VERCEL_URL ? [`https://${process.env.VERCEL_URL}`] : []),
+    ...(process.env.VERCEL_PROJECT_PRODUCTION_URL
+      ? [`https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`]
+      : []),
+  ],
 });
