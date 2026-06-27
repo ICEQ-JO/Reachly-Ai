@@ -35,7 +35,7 @@ export function RedditCard({ draft, onSave, onApprove, onSchedule }: Props) {
   }
 
   return (
-    <div style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "10px", overflow: "hidden", width: "100%", maxWidth: "560px" }}>
+    <div style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "10px", overflow: "hidden", width: "100%" }}>
       {/* Subreddit bar */}
       <div style={{ background: "#ff450010", padding: "8px 12px", display: "flex", alignItems: "center", gap: "8px", borderBottom: "1px solid var(--border)" }}>
         <div style={{ width: "20px", height: "20px", borderRadius: "50%", background: "#ff4500", display: "flex", alignItems: "center", justifyContent: "center" }}>

@@ -153,45 +153,69 @@ export function ScheduleCalendar({ drafts: initialDrafts }: Props) {
       </div>
 
       {/* Schedule picker overlay */}
-      {schedulingDraft && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(4px)" }}>
-          <div style={{ background: "var(--bg)", borderRadius: "14px", padding: "24px", width: "340px", border: "1px solid var(--border)", boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-              <h3 style={{ fontSize: "15px", fontWeight: "700", color: "var(--fg)" }}>Pick a Slot</h3>
-              <button onClick={() => setSchedulingDraft(null)} style={{ background: "none", border: "none", cursor: "pointer" }}>
-                <X size={16} color="var(--fg-muted)" />
-              </button>
-            </div>
-            <div style={{ fontSize: "12px", color: "var(--fg-muted)", marginBottom: "14px", lineHeight: "1.5" }}>
-              {schedulingDraft.body.slice(0, 80)}…
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: "3px", marginBottom: "4px" }}>
-              {DAYS.map(d => (
-                <div key={d} style={{ fontSize: "10px", textAlign: "center", color: "var(--fg-faint)", fontWeight: "600" }}>{d}</div>
-              ))}
-            </div>
-            {TIMES.map(time => (
-              <div key={time} style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: "3px", marginBottom: "3px" }}>
-                {DAYS.map(day => {
-                  const key = `${day}|${time}`;
-                  const taken = (scheduled[key]?.length ?? 0) > 0;
-                  return (
-                    <button key={day} onClick={() => scheduleToSlot(schedulingDraft.id, day, time)}
-                      title={`${day} ${time}`}
-                      style={{
-                        height: "28px", borderRadius: "5px", border: `1px solid ${taken ? "var(--border)" : "transparent"}`,
-                        background: taken ? "var(--bg-subtle)" : "var(--accent-bg)",
-                        cursor: taken ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "9px", color: taken ? "var(--fg-faint)" : "var(--accent)", fontWeight: "600", transition: "all 0.1s",
-                      }}>
-                      {taken ? "·" : time.slice(0, -2)}
-                    </button>
-                  );
-                })}
+      {schedulingDraft && (() => {
+        const p = platform(schedulingDraft);
+        const color = PLATFORM_COLORS[p] ?? "var(--accent)";
+        return (
+          <div onClick={() => setSchedulingDraft(null)}
+            style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(6px)", padding: "20px" }}>
+            <div onClick={(e) => e.stopPropagation()}
+              style={{ background: "var(--bg)", borderRadius: "18px", width: "460px", maxWidth: "100%", border: "1px solid var(--border)", boxShadow: "0 24px 70px rgba(0,0,0,0.45)", overflow: "hidden" }}>
+              {/* Header */}
+              <div style={{ padding: "18px 22px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "11px" }}>
+                  <div style={{ width: "36px", height: "36px", borderRadius: "11px", background: `${color}18`, color, display: "flex", alignItems: "center", justifyContent: "center" }}>{PLATFORM_ICONS[p] ?? <Plus size={15} />}</div>
+                  <div>
+                    <h3 style={{ fontSize: "15px", fontWeight: "700", color: "var(--fg)" }}>Schedule post</h3>
+                    <p style={{ fontSize: "11px", color: "var(--fg-muted)", textTransform: "capitalize" }}>{p} · pick a day &amp; time</p>
+                  </div>
+                </div>
+                <button onClick={() => setSchedulingDraft(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--fg-muted)", display: "flex" }}>
+                  <X size={18} />
+                </button>
               </div>
-            ))}
+
+              {/* Post preview */}
+              <div style={{ padding: "14px 22px", display: "flex", gap: "12px", alignItems: "center", borderBottom: "1px solid var(--border)", background: "var(--bg-subtle)" }}>
+                {schedulingDraft.mediaUrl && (
+                  <img src={schedulingDraft.mediaUrl} alt="" loading="lazy" decoding="async"
+                    style={{ width: "46px", height: "46px", borderRadius: "9px", objectFit: "cover", flexShrink: 0, border: "1px solid var(--border)" }} />
+                )}
+                <div style={{ fontSize: "12.5px", color: "var(--fg)", lineHeight: "1.5", overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
+                  {schedulingDraft.body}
+                </div>
+              </div>
+
+              {/* Slot grid */}
+              <div style={{ padding: "16px 22px 22px" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "42px repeat(7, 1fr)", gap: "5px", marginBottom: "7px" }}>
+                  <div />
+                  {DAYS.map(d => (
+                    <div key={d} style={{ fontSize: "10.5px", textAlign: "center", color: d === "Sat" || d === "Sun" ? "var(--fg-faint)" : "var(--fg-muted)", fontWeight: "700" }}>{d}</div>
+                  ))}
+                </div>
+                {TIMES.map(time => (
+                  <div key={time} style={{ display: "grid", gridTemplateColumns: "42px repeat(7, 1fr)", gap: "5px", marginBottom: "5px" }}>
+                    <div style={{ fontSize: "10px", color: "var(--fg-faint)", fontWeight: "600", display: "flex", alignItems: "center", justifyContent: "flex-end", paddingRight: "2px" }}>{time}</div>
+                    {DAYS.map(day => {
+                      const key = `${day}|${time}`;
+                      const taken = (scheduled[key]?.length ?? 0) > 0;
+                      return (
+                        <button key={day} disabled={taken} onClick={() => scheduleToSlot(schedulingDraft.id, day, time)} title={`${day} ${time}`}
+                          style={{ height: "30px", borderRadius: "8px", border: `1px solid ${taken ? "var(--border)" : `${color}40`}`, background: taken ? "var(--bg-subtle)" : `${color}12`, cursor: taken ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.12s" }}
+                          onMouseEnter={(e) => { if (!taken) e.currentTarget.style.background = color; }}
+                          onMouseLeave={(e) => { if (!taken) e.currentTarget.style.background = `${color}12`; }}>
+                          {taken && <span style={{ width: "5px", height: "5px", borderRadius: "50%", background: "var(--fg-faint)" }} />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       <div style={{ display: "flex", gap: "24px" }}>
         {/* Left Sidebar: Queue + Auto-Scheduler */}
@@ -307,57 +331,61 @@ export function ScheduleCalendar({ drafts: initialDrafts }: Props) {
 
         {/* Horizontal calendar grid */}
         <div style={{ flex: 1, overflowX: "auto" }}>
-          <div style={{ minWidth: "700px" }}>
+          <div style={{ minWidth: "720px", border: "1px solid var(--border)", borderRadius: "14px", padding: "12px", background: "var(--bg)" }}>
             {/* Day headers */}
-            <div style={{ display: "grid", gridTemplateColumns: "60px repeat(7, 1fr)", gap: "3px", marginBottom: "3px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "54px repeat(7, 1fr)", gap: "6px", marginBottom: "8px" }}>
               <div />
-              {DAYS.map((day) => (
-                <div key={day} style={{ textAlign: "center", fontSize: "12px", fontWeight: "700", color: day === "Sat" || day === "Sun" ? "var(--fg-faint)" : "var(--fg)", padding: "6px 0" }}>
-                  {day}
-                </div>
-              ))}
+              {DAYS.map((day) => {
+                const weekend = day === "Sat" || day === "Sun";
+                return (
+                  <div key={day} style={{ textAlign: "center", padding: "7px 0", borderRadius: "9px", background: weekend ? "transparent" : "var(--bg-subtle)", fontSize: "12px", fontWeight: "700", color: weekend ? "var(--fg-faint)" : "var(--fg)", letterSpacing: "0.02em" }}>
+                    {day}
+                  </div>
+                );
+              })}
             </div>
 
             {/* Time rows */}
             {TIMES.map((time) => (
-              <div key={time} style={{ display: "grid", gridTemplateColumns: "60px repeat(7, 1fr)", gap: "3px", marginBottom: "3px" }}>
-                <div style={{ fontSize: "10px", color: "var(--fg-faint)", fontWeight: "600", display: "flex", alignItems: "center", paddingRight: "8px", justifyContent: "flex-end" }}>{time}</div>
+              <div key={time} style={{ display: "grid", gridTemplateColumns: "54px repeat(7, 1fr)", gap: "6px", marginBottom: "6px" }}>
+                <div style={{ fontSize: "10.5px", color: "var(--fg-faint)", fontWeight: "700", display: "flex", alignItems: "center", paddingRight: "8px", justifyContent: "flex-end" }}>{time}</div>
                 {DAYS.map((day) => {
                   const key = `${day}|${time}`;
                   const slots = scheduled[key] ?? [];
+                  const weekend = day === "Sat" || day === "Sun";
+                  const empty = slots.length === 0;
                   return (
                     <div key={day}
-                      style={{ minHeight: "54px", background: day === "Sat" || day === "Sun" ? "var(--bg-subtle)" : "var(--bg)", border: "1px solid var(--border)", borderRadius: "7px", padding: "4px", cursor: slots.length === 0 ? "pointer" : "default", transition: "all 0.1s" }}
+                      style={{ minHeight: "62px", background: weekend ? "var(--bg-subtle)" : "var(--bg)", border: "1px solid var(--border)", borderRadius: "10px", padding: "5px", cursor: empty ? "pointer" : "default", transition: "all 0.12s" }}
                       onClick={() => {
-                        if (slots.length === 0) {
-                          if (schedulingDraft) {
-                            scheduleToSlot(schedulingDraft.id, day, time);
-                          } else if (unscheduled.length > 0) {
-                            scheduleToSlot(unscheduled[0].id, day, time);
-                          }
+                        if (empty) {
+                          if (schedulingDraft) scheduleToSlot(schedulingDraft.id, day, time);
+                          else if (unscheduled.length > 0) scheduleToSlot(unscheduled[0].id, day, time);
                         }
                       }}
-                      onMouseEnter={(e) => { if (slots.length === 0) (e.currentTarget as HTMLElement).style.borderColor = "var(--accent)"; }}
-                      onMouseLeave={(e) => { if (slots.length === 0) (e.currentTarget as HTMLElement).style.borderColor = "var(--border)"; }}>
+                      onMouseEnter={(e) => { if (empty) { const el = e.currentTarget as HTMLElement; el.style.borderColor = "var(--accent)"; el.style.background = "var(--accent-bg)"; } }}
+                      onMouseLeave={(e) => { if (empty) { const el = e.currentTarget as HTMLElement; el.style.borderColor = "var(--border)"; el.style.background = weekend ? "var(--bg-subtle)" : "var(--bg)"; } }}>
                       {slots.map((s) => {
                         const p = platform(s);
                         const color = PLATFORM_COLORS[p] ?? "var(--accent)";
                         return (
-                          <div key={s.id} style={{ background: `${color}15`, border: `1px solid ${color}40`, borderRadius: "5px", padding: "3px 6px", fontSize: "10px", color, fontWeight: "600", lineHeight: "1.3", marginBottom: "2px", display: "flex", gap: "4px", alignItems: "flex-start" }}>
-                            <span style={{ flexShrink: 0, marginTop: "1px" }}>{PLATFORM_ICONS[p]}</span>
+                          <div key={s.id} style={{ background: `${color}12`, borderLeft: `3px solid ${color}`, borderRadius: "6px", padding: "4px 5px 4px 7px", fontSize: "10px", color: "var(--fg)", fontWeight: "500", lineHeight: "1.35", marginBottom: "3px", display: "flex", gap: "5px", alignItems: "flex-start" }}>
+                            {s.mediaUrl
+                              ? <img src={s.mediaUrl} alt="" loading="lazy" decoding="async" style={{ width: "16px", height: "16px", borderRadius: "4px", objectFit: "cover", flexShrink: 0, marginTop: "1px" }} />
+                              : <span style={{ flexShrink: 0, marginTop: "1px", color }}>{PLATFORM_ICONS[p]}</span>}
                             <span style={{ overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", flex: 1 }}>
-                              {s.body.slice(0, 40)}
+                              {s.body.slice(0, 42)}
                             </span>
-                            <button onClick={(e) => { e.stopPropagation(); unschedule(s.id); }} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, flexShrink: 0 }}>
-                              <X size={9} color={color} />
+                            <button onClick={(e) => { e.stopPropagation(); unschedule(s.id); }} title="Unschedule"
+                              style={{ background: "none", border: "none", cursor: "pointer", padding: 0, flexShrink: 0, color: "var(--fg-faint)", display: "flex" }}>
+                              <X size={11} />
                             </button>
                           </div>
                         );
                       })}
-                      {slots.length === 0 && (
-                        <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", opacity: 0 }}
-                          className="empty-slot-plus">
-                          <Plus size={12} color="var(--fg-faint)" />
+                      {empty && (
+                        <div style={{ height: "100%", minHeight: "52px", display: "flex", alignItems: "center", justifyContent: "center", opacity: 0 }} className="empty-slot-plus">
+                          <Plus size={14} color="var(--accent)" />
                         </div>
                       )}
                     </div>

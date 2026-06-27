@@ -6,16 +6,16 @@ import { products, chatMessages } from "@/lib/db/schema";
 import { eq, and, desc, asc } from "drizzle-orm";
 import { AiChat } from "@/components/chat/AiChat";
 
-const B2C_SUGGESTIONS = [
-  "Which platform is driving the most engagement?",
-  "What should I post on Instagram this week?",
-  "Write a Reddit post that doesn't feel like an ad",
-  "Give me a posting schedule for next week",
-  "Analyze my Instagram vs. Facebook performance",
-  "Turn my best post into 3 new variations",
+const B2B_SUGGESTIONS = [
+  "How are my outbound campaigns performing?",
+  "Which leads should I follow up with first?",
+  "Draft a LinkedIn post about our differentiator",
+  "What's my reply rate vs. the SaaS benchmark?",
+  "Summarize my best-performing LinkedIn content",
+  "Suggest a follow-up sequence for contacted leads",
 ];
 
-export default async function B2cChatPage() {
+export default async function B2bChatPage() {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect("/login");
 
@@ -46,7 +46,7 @@ export default async function B2cChatPage() {
 
   return (
     <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
-      <AiChat initialMessages={messages} productName={product.name} suggestions={B2C_SUGGESTIONS} />
+      <AiChat initialMessages={messages} productName={product.name} suggestions={B2B_SUGGESTIONS} />
     </div>
   );
 }

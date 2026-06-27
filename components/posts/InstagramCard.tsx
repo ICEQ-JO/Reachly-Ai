@@ -34,7 +34,7 @@ export function InstagramCard({ draft, onSave, onApprove, onSchedule }: Props) {
   const hashtags = parts.slice(1).join("\n");
 
   return (
-    <div style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "12px", overflow: "hidden", width: "100%", maxWidth: "400px" }}>
+    <div style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "12px", overflow: "hidden", width: "100%" }}>
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "10px 12px" }}>
         <div style={{ width: "32px", height: "32px", borderRadius: "50%", background: "linear-gradient(135deg, #f09433,#e6683c,#dc2743,#cc2366,#bc1888)", flexShrink: 0 }} />

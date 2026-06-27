@@ -6,6 +6,22 @@ import { products, leads, drafts, campaigns, agentRuns } from "@/lib/db/schema";
 import { eq, and, desc, count, sql } from "drizzle-orm";
 import Link from "next/link";
 import { Users, Mail, Briefcase, TrendingUp, CheckCircle2, Zap, ArrowRight, Activity, Megaphone, Target, Archive } from "lucide-react";
+import { TrendChart } from "@/components/charts/TrendChart";
+
+// Bucket a set of dated items into the last `n` weekly buckets (oldest → newest).
+function weeklyBuckets(n: number) {
+  const now = new Date();
+  return Array.from({ length: n }, (_, idx) => {
+    const i = n - 1 - idx; // weeks ago
+    const end = new Date(now); end.setDate(now.getDate() - i * 7);
+    return { weeksAgo: i, label: end.toLocaleDateString("en-US", { month: "short", day: "numeric" }) };
+  });
+}
+function bucketIndex(date: Date, n: number) {
+  const days = (Date.now() - new Date(date).getTime()) / 86400000;
+  const weeksAgo = Math.floor(days / 7);
+  return weeksAgo < n ? n - 1 - weeksAgo : -1;
+}
 
 export default async function B2bDashboardPage() {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -17,7 +33,7 @@ export default async function B2bDashboardPage() {
   });
   if (!product) redirect("/onboarding");
 
-  const [[leadStats], [draftStats], recentCampaigns, recentRuns] = await Promise.all([
+  const [[leadStats], [draftStats], recentCampaigns, recentRuns, leadsList] = await Promise.all([
     db.select({
       total:     count(),
       replied:   sql<number>`count(*) filter (where ${leads.status} = 'replied')`,
@@ -34,7 +50,22 @@ export default async function B2bDashboardPage() {
     db.select({ id: agentRuns.id, channel: agentRuns.channel, status: agentRuns.status, createdAt: agentRuns.createdAt })
       .from(agentRuns).where(eq(agentRuns.productId, product.id))
       .orderBy(desc(agentRuns.createdAt)).limit(5),
+    db.select({ createdAt: leads.createdAt, status: leads.status })
+      .from(leads).where(eq(leads.productId, product.id)),
   ]);
+
+  // Weekly lead-flow chart (new leads + replies over the last 6 weeks)
+  const WEEKS = 6;
+  const buckets = weeklyBuckets(WEEKS);
+  const leadVals = new Array(WEEKS).fill(0);
+  const replyVals = new Array(WEEKS).fill(0);
+  for (const l of leadsList) {
+    const bi = bucketIndex(l.createdAt as Date, WEEKS);
+    if (bi >= 0) { leadVals[bi] += 1; if (l.status === "replied") replyVals[bi] += 1; }
+  }
+  const recentLeads = leadVals.slice(-3).reduce((a, b) => a + b, 0);
+  const prevLeads = leadVals.slice(0, 3).reduce((a, b) => a + b, 0);
+  const leadTrend = prevLeads > 0 ? Math.round(((recentLeads - prevLeads) / prevLeads) * 100) : 0;
 
   const replyRate = Number(leadStats.total) > 0
     ? Math.round((Number(leadStats.replied) / Number(leadStats.total)) * 100)
@@ -48,7 +79,7 @@ export default async function B2bDashboardPage() {
   ];
 
   return (
-    <div style={{ padding: "28px 32px", maxWidth: "960px" }}>
+    <div style={{ padding: "28px 32px", maxWidth: "1040px", margin: "0 auto" }}>
       <div style={{ marginBottom: "28px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "6px" }}>
           <div style={{ width: "32px", height: "32px", background: "var(--accent-bg)", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -77,6 +108,21 @@ export default async function B2bDashboardPage() {
             </div>
           </Link>
         ))}
+      </div>
+
+      {/* Lead-flow trend chart */}
+      <div style={{ marginBottom: "20px" }}>
+        <TrendChart
+          title="Lead Flow — last 6 weeks"
+          xLabels={buckets.map((b) => b.label)}
+          series={[
+            { label: "New leads", color: "#2563eb", values: leadVals, area: true },
+            { label: "Replies", color: "#16a34a", values: replyVals },
+          ]}
+          total={String(Number(leadStats.total))}
+          totalLabel="total leads"
+          trend={leadTrend}
+        />
       </div>
 
       {/* 2-col: ICP + Quick Actions */}

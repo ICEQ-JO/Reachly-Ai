@@ -30,7 +30,7 @@ export function FacebookCard({ draft, onSave, onApprove, onSchedule }: Props) {
   const totalReactions = eng.likes + (reaction ? 1 : 0);
 
   return (
-    <div style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "12px", overflow: "hidden", width: "100%", maxWidth: "420px" }}>
+    <div style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "12px", overflow: "hidden", width: "100%" }}>
       {/* Header */}
       <div style={{ display: "flex", alignItems: "flex-start", gap: "10px", padding: "14px 14px 10px" }}>
         <div style={{ width: "36px", height: "36px", borderRadius: "50%", background: "#1877f2", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
@@ -69,7 +69,7 @@ export function FacebookCard({ draft, onSave, onApprove, onSchedule }: Props) {
       </div>
 
       {/* Image display */}
-      <div style={{ width: "100%", height: "200px", position: "relative", background: "var(--bg-subtle)", overflow: "hidden", borderTop: "1px solid var(--border)" }}>
+      <div style={{ width: "100%", aspectRatio: "1.91 / 1", position: "relative", background: "var(--bg-subtle)", overflow: "hidden", borderTop: "1px solid var(--border)" }}>
         {draft.mediaUrl ? (
           <img
             src={draft.mediaUrl}

@@ -7,6 +7,20 @@ import { eq, and, desc, count, sql } from "drizzle-orm";
 import Link from "next/link";
 import { Globe, MessageCircle, TrendingUp, Zap, ArrowRight, Calendar, MessageSquare, Archive, Megaphone } from "lucide-react";
 import { Instagram } from "@/components/icons/Instagram";
+import { TrendChart } from "@/components/charts/TrendChart";
+
+function weeklyBuckets(n: number) {
+  const now = new Date();
+  return Array.from({ length: n }, (_, idx) => {
+    const i = n - 1 - idx;
+    const end = new Date(now); end.setDate(now.getDate() - i * 7);
+    return { label: end.toLocaleDateString("en-US", { month: "short", day: "numeric" }) };
+  });
+}
+function bucketIndex(date: Date, n: number) {
+  const weeksAgo = Math.floor((Date.now() - new Date(date).getTime()) / 86400000 / 7);
+  return weeksAgo < n ? n - 1 - weeksAgo : -1;
+}
 
 export default async function B2cDashboardPage() {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -18,7 +32,7 @@ export default async function B2cDashboardPage() {
   });
   if (!product) redirect("/onboarding");
 
-  const [[draftStats], recentCampaigns, recentRuns] = await Promise.all([
+  const [[draftStats], recentCampaigns, recentRuns, postedDrafts] = await Promise.all([
     db.select({
       total:     count(),
       instagram: sql<number>`count(*) filter (where ${drafts.channel} = 'instagram')`,
@@ -33,7 +47,25 @@ export default async function B2cDashboardPage() {
     db.select({ id: agentRuns.id, channel: agentRuns.channel, status: agentRuns.status, createdAt: agentRuns.createdAt })
       .from(agentRuns).where(eq(agentRuns.productId, product.id))
       .orderBy(desc(agentRuns.createdAt)).limit(5),
+    db.select({ postedAt: drafts.postedAt, engagements: drafts.engagements })
+      .from(drafts).where(and(eq(drafts.productId, product.id), sql`${drafts.postedAt} is not null`)),
   ]);
+
+  // Weekly audience-reach chart from posted content
+  const WEEKS = 6;
+  const buckets = weeklyBuckets(WEEKS);
+  const reachVals = new Array(WEEKS).fill(0);
+  let totalReach = 0;
+  for (const d of postedDrafts) {
+    const reach = Number((d.engagements as { reach?: number } | null)?.reach ?? 0);
+    totalReach += reach;
+    const bi = d.postedAt ? bucketIndex(d.postedAt as Date, WEEKS) : -1;
+    if (bi >= 0) reachVals[bi] += reach;
+  }
+  const recentReach = reachVals.slice(-3).reduce((a, b) => a + b, 0);
+  const prevReach = reachVals.slice(0, 3).reduce((a, b) => a + b, 0);
+  const reachTrend = prevReach > 0 ? Math.round(((recentReach - prevReach) / prevReach) * 100) : 0;
+  const fmtReach = totalReach >= 1000 ? `${(totalReach / 1000).toFixed(1)}K` : String(totalReach);
 
   const engagementRate = Number(draftStats.total) > 0
     ? Math.round((Number(draftStats.approved) / Number(draftStats.total)) * 100)
@@ -53,7 +85,7 @@ export default async function B2cDashboardPage() {
   };
 
   return (
-    <div style={{ padding: "28px 32px", maxWidth: "960px" }}>
+    <div style={{ padding: "28px 32px", maxWidth: "1040px", margin: "0 auto" }}>
       <div style={{ marginBottom: "28px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "6px" }}>
           <div style={{ width: "32px", height: "32px", background: "var(--accent-bg)", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -82,6 +114,18 @@ export default async function B2cDashboardPage() {
             </div>
           </Link>
         ))}
+      </div>
+
+      {/* Audience-reach trend chart */}
+      <div style={{ marginBottom: "20px" }}>
+        <TrendChart
+          title="Audience Reach — last 6 weeks"
+          xLabels={buckets.map((b) => b.label)}
+          series={[{ label: "Reach", color: "#e1306c", values: reachVals, area: true }]}
+          total={fmtReach}
+          totalLabel="total reach"
+          trend={reachTrend}
+        />
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "20px" }}>

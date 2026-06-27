@@ -168,7 +168,7 @@ export function PostVault({ drafts: initialDrafts, campaigns, selectedCampaign }
           <div style={{ fontSize: "13px" }}>Create a campaign to start generating posts.</div>
         </div>
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(360px, 1fr))", gap: "20px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(380px, 400px))", justifyContent: "center", gap: "24px" }}>
           {filtered.map((draft) => {
             const platform = draft.platform ?? draft.channel;
             const color = PLATFORM_COLORS[platform];

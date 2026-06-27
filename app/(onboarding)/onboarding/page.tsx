@@ -44,6 +44,31 @@ const INITIAL: WizardState = {
   targetCustomer: "", niche: "", offering: "", tone: "professional", appType: "", goals: [], intensity: "steady",
 };
 
+/* ── Demo presets (one-click autofill for live presentations) ─────────────── */
+const DEMO_B2B: WizardState = {
+  ...INITIAL,
+  name: "FlowMetrics",
+  description: "AI-powered analytics dashboard that unifies scattered SaaS metrics into one view your whole team actually opens.",
+  type: "saas", audience: "b2b", scope: ["global"], budgetMin: 2000, budgetMax: 5000,
+  companyStage: "scaling", channels: ["lead-gen", "linkedin"],
+  targetTitles: ["Head of Growth", "VP Marketing", "Founder"],
+  targetIndustry: "SaaS", targetSizes: ["11–50", "51–200"],
+  keywords: ["analytics", "growth", "metrics"],
+  painPoint: "Metrics are scattered across too many tools, so teams act on stale data and miss their numbers.",
+  differentiator: "Unlike dashboards bolted onto a single tool, we unify every source with AI-driven insights in real time.",
+};
+
+const DEMO_B2C: WizardState = {
+  ...INITIAL,
+  name: "GlowSkin",
+  description: "Clean-beauty skincare brand for Gen-Z — natural, cruelty-free products that actually work, without the markup.",
+  type: "saas", audience: "b2c", scope: ["global"], budgetMin: 500, budgetMax: 2000,
+  companyStage: "growing", channels: ["instagram", "facebook", "reddit"],
+  targetCustomer: "Gen-Z skincare enthusiasts",
+  niche: "beauty and skincare", offering: "natural cruelty-free skincare products",
+  tone: "playful", goals: ["brand awareness", "engagement", "sales"], intensity: "steady",
+};
+
 /* ── Helper components ───────────────────────────────────────────────────── */
 function Pill({ label, selected, onClick }: { label: string; selected: boolean; onClick: () => void }) {
   return (
@@ -214,6 +239,13 @@ export default function OnboardingPage() {
   }
 
   function back() { if (stepIdx > 0) setStepIdx((i) => i - 1); }
+
+  // Demo autofill: load a complete preset and jump straight to the review step.
+  function autofill(preset: WizardState) {
+    setS(preset);
+    setStepIdx(getSteps(preset.audience).length - 1);
+    setError("");
+  }
 
   async function submit() {
     setSubmitting(true);
@@ -623,7 +655,23 @@ export default function OnboardingPage() {
           <Zap size={14} color="#000" fill="#000" />
         </div>
         <span style={{ fontSize: "16px", fontWeight: "700", color: "#fafafa" }}>Reachly</span>
-        <span style={{ marginLeft: "auto", fontSize: "12px", color: "#71717a" }}>
+
+        {/* Demo autofill — one click to populate everything and jump to review */}
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "6px", padding: "4px 6px 4px 10px", border: "1px dashed #3f3f46", borderRadius: "999px" }}>
+          <span style={{ fontSize: "11px", color: "#71717a", display: "flex", alignItems: "center", gap: "4px" }}>
+            <Zap size={11} color="#f59e0b" /> Demo
+          </span>
+          <button type="button" onClick={() => autofill(DEMO_B2B)}
+            style={{ padding: "4px 10px", borderRadius: "999px", border: "1px solid #3f3f46", background: "#18181b", color: "#fafafa", fontSize: "11px", fontWeight: "600", cursor: "pointer" }}>
+            B2B
+          </button>
+          <button type="button" onClick={() => autofill(DEMO_B2C)}
+            style={{ padding: "4px 10px", borderRadius: "999px", border: "1px solid #3f3f46", background: "#18181b", color: "#fafafa", fontSize: "11px", fontWeight: "600", cursor: "pointer" }}>
+            B2C
+          </button>
+        </div>
+
+        <span style={{ fontSize: "12px", color: "#71717a" }}>
           Step {stepIdx + 1} of {steps.length} — {stepLabel[currentStep] ?? currentStep}
         </span>
       </div>
