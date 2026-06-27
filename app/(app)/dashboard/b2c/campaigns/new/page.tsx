@@ -315,27 +315,29 @@ export default function NewB2cCampaignPage() {
   // ─────────────────────────────── Generating
   if (step === "generating") {
     return (
-      <div style={{ padding: "32px", maxWidth: "480px", textAlign: "center" }}>
-        <div style={{ width: "64px", height: "64px", borderRadius: "16px", background: "var(--accent-bg)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px" }}>
-          <Loader2 size={28} color="var(--accent)" style={{ animation: "spin 1s linear infinite" }} />
-        </div>
-        <h2 style={{ fontSize: "20px", fontWeight: "700", color: "var(--fg)", marginBottom: "8px" }}>Generating Content…</h2>
-        <p style={{ fontSize: "13px", color: "var(--fg-muted)" }}>
-          AI is crafting tailored posts for {selected.join(", ")}. This takes about 15–30 seconds.
-        </p>
-        <div style={{ marginTop: "28px", display: "flex", flexDirection: "column", gap: "10px" }}>
-          {selected.map((p) => {
-            const info = PLATFORMS.find(x => x.id === p)!;
-            return (
-              <div key={p} style={{ display: "flex", alignItems: "center", gap: "12px", padding: "12px 16px", background: "var(--bg-subtle)", borderRadius: "10px", border: "1px solid var(--border)" }}>
-                <div style={{ width: "32px", height: "32px", borderRadius: "8px", background: info.bg, display: "flex", alignItems: "center", justifyContent: "center", color: info.color }}>
-                  <info.icon size={16} />
+      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "70vh", padding: "20px", width: "100%", maxWidth: "960px" }}>
+        <div className="card" style={{ padding: "40px", maxWidth: "540px", width: "100%", textAlign: "center", boxShadow: "0 20px 40px rgba(0,0,0,0.25)", border: "1px solid var(--border)", borderRadius: "16px" }}>
+          <div style={{ width: "72px", height: "72px", borderRadius: "20px", background: "var(--accent-bg)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 24px" }}>
+            <Loader2 size={36} color="var(--accent)" style={{ animation: "spin 1s linear infinite" }} />
+          </div>
+          <h2 style={{ fontSize: "24px", fontWeight: "700", color: "var(--fg)", marginBottom: "12px" }}>Generating Campaign Content…</h2>
+          <p style={{ fontSize: "14px", color: "var(--fg-muted)", marginBottom: "28px" }}>
+            AI is crafting tailored posts for {selected.map(p => p.toUpperCase()).join(", ")}. This takes about 15–30 seconds.
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+            {selected.map((p) => {
+              const info = PLATFORMS.find(x => x.id === p)!;
+              return (
+                <div key={p} style={{ display: "flex", alignItems: "center", gap: "14px", padding: "14px 18px", background: "var(--bg-subtle)", borderRadius: "12px", border: "1px solid var(--border)" }}>
+                  <div style={{ width: "38px", height: "38px", borderRadius: "10px", background: info.bg, display: "flex", alignItems: "center", justifyContent: "center", color: info.color }}>
+                    <info.icon size={18} />
+                  </div>
+                  <span style={{ fontSize: "14px", fontWeight: "600", color: "var(--fg)" }}>Writing {info.label} post…</span>
+                  <Loader2 size={16} color={info.color} style={{ marginLeft: "auto", animation: "spin 1s linear infinite" }} />
                 </div>
-                <span style={{ fontSize: "13px", fontWeight: "500", color: "var(--fg)" }}>Writing {info.label} post…</span>
-                <Loader2 size={14} color={info.color} style={{ marginLeft: "auto", animation: "spin 1s linear infinite" }} />
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
       </div>
     );
@@ -343,23 +345,25 @@ export default function NewB2cCampaignPage() {
 
   // ─────────────────────────────── Done
   return (
-    <div style={{ padding: "32px", maxWidth: "480px", textAlign: "center" }}>
-      <div style={{ width: "64px", height: "64px", borderRadius: "50%", background: "#16a34a18", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px", border: "2px solid #16a34a40" }}>
-        <Check size={28} color="#16a34a" />
-      </div>
-      <h2 style={{ fontSize: "22px", fontWeight: "700", color: "var(--fg)", marginBottom: "8px" }}>Campaign Created! 🎉</h2>
-      <p style={{ fontSize: "13px", color: "var(--fg-muted)", marginBottom: "24px" }}>
-        Generated <strong>{generatedCount}</strong> posts across {selected.length} platform{selected.length > 1 ? "s" : ""}.
-      </p>
-      <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-        <button className="btn btn-primary" style={{ width: "100%", padding: "12px" }}
-          onClick={() => router.push(`/dashboard/b2c/vault?campaign=${campaignId}`)}>
-          View Posts in Vault
-        </button>
-        <button className="btn btn-secondary" style={{ width: "100%", padding: "12px" }}
-          onClick={() => router.push("/dashboard/b2c/campaigns")}>
-          Back to Campaigns
-        </button>
+    <div style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "70vh", padding: "20px", width: "100%", maxWidth: "960px" }}>
+      <div className="card" style={{ padding: "40px", maxWidth: "540px", width: "100%", textAlign: "center", boxShadow: "0 20px 40px rgba(0,0,0,0.25)", border: "1px solid var(--border)", borderRadius: "16px" }}>
+        <div style={{ width: "72px", height: "72px", borderRadius: "50%", background: "#16a34a18", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 24px", border: "2px solid #16a34a40" }}>
+          <Check size={36} color="#16a34a" />
+        </div>
+        <h2 style={{ fontSize: "26px", fontWeight: "700", color: "var(--fg)", marginBottom: "12px" }}>Campaign Created! 🎉</h2>
+        <p style={{ fontSize: "15px", color: "var(--fg-muted)", marginBottom: "32px", lineHeight: "1.5" }}>
+          Generated <strong>{generatedCount}</strong> posts across {selected.length} platform{selected.length > 1 ? "s" : ""}.
+        </p>
+        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+          <button className="btn btn-primary" style={{ width: "100%", padding: "14px", fontSize: "15px", fontWeight: "600" }}
+            onClick={() => router.push(`/dashboard/b2c/vault?campaign=${campaignId}`)}>
+            View Posts in Vault
+          </button>
+          <button className="btn btn-secondary" style={{ width: "100%", padding: "14px", fontSize: "15px", fontWeight: "600" }}
+            onClick={() => router.push("/dashboard/b2c/campaigns")}>
+            Back to Campaigns
+          </button>
+        </div>
       </div>
     </div>
   );

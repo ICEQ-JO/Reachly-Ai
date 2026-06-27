@@ -283,66 +283,70 @@ export default function NewB2bCampaignPage() {
 
       {/* ─────────────────────────────── Campaign Run Status (Progress) */}
       {step === "running" && (
-        <div style={{ textAlign: "center", padding: "40px 20px" }}>
-          <div style={{ width: "64px", height: "64px", borderRadius: "16px", background: "var(--accent-bg)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px" }}>
-            <Loader2 size={28} color="var(--accent)" style={{ animation: "spin 1s linear infinite" }} />
-          </div>
-          <h2 style={{ fontSize: "20px", fontWeight: "700", color: "var(--fg)", marginBottom: "8px" }}>Executing Campaign Agents…</h2>
-          <p style={{ fontSize: "13px", color: "var(--fg-muted)", marginBottom: "28px" }}>
-            Your background agents are executing tasks. This might take 15–30 seconds.
-          </p>
+        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "60vh", padding: "20px 0", width: "100%" }}>
+          <div className="card" style={{ padding: "40px", maxWidth: "540px", width: "100%", textAlign: "center", boxShadow: "0 20px 40px rgba(0,0,0,0.25)", border: "1px solid var(--border)", borderRadius: "16px", background: "var(--bg)" }}>
+            <div style={{ width: "72px", height: "72px", borderRadius: "20px", background: "var(--accent-bg)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 24px" }}>
+              <Loader2 size={36} color="var(--accent)" style={{ animation: "spin 1s linear infinite" }} />
+            </div>
+            <h2 style={{ fontSize: "24px", fontWeight: "700", color: "var(--fg)", marginBottom: "12px" }}>Executing Campaign Agents…</h2>
+            <p style={{ fontSize: "14px", color: "var(--fg-muted)", marginBottom: "28px" }}>
+              Your background agents are executing tasks. This might take 15–30 seconds.
+            </p>
 
-          <div style={{ display: "flex", flexDirection: "column", gap: "10px", textAlign: "left", maxWidth: "400px", margin: "0 auto" }}>
-            {(campaignType === "b2b-leads" ? SCRAPE_STEPS : LINKEDIN_STEPS).map((s, idx) => {
-              const active = idx === runningStep;
-              const done = idx < runningStep;
-              return (
-                <div key={s.key} style={{ display: "flex", alignItems: "center", gap: "12px", padding: "12px 16px", background: active ? "var(--accent-bg)" : "var(--bg-subtle)", borderRadius: "10px", border: active ? "1px solid var(--accent)" : "1px solid var(--border)", opacity: done || active ? 1 : 0.5 }}>
-                  <span style={{ fontSize: "16px" }}>{s.icon}</span>
-                  <span style={{ fontSize: "13px", fontWeight: "500", color: active ? "var(--accent)" : "var(--fg)" }}>{s.label}</span>
-                  {active && <Loader2 size={14} color="var(--accent)" style={{ marginLeft: "auto", animation: "spin 1s linear infinite" }} />}
-                  {done && <span style={{ marginLeft: "auto", color: "var(--green)", fontWeight: "bold" }}>✓</span>}
-                </div>
-              );
-            })}
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px", textAlign: "left", maxWidth: "420px", margin: "0 auto" }}>
+              {(campaignType === "b2b-leads" ? SCRAPE_STEPS : LINKEDIN_STEPS).map((s, idx) => {
+                const active = idx === runningStep;
+                const done = idx < runningStep;
+                return (
+                  <div key={s.key} style={{ display: "flex", alignItems: "center", gap: "14px", padding: "14px 18px", background: active ? "var(--accent-bg)" : "var(--bg-subtle)", borderRadius: "12px", border: active ? "1px solid var(--accent)" : "1px solid var(--border)", opacity: done || active ? 1 : 0.5 }}>
+                    <span style={{ fontSize: "18px" }}>{s.icon}</span>
+                    <span style={{ fontSize: "14px", fontWeight: "600", color: active ? "var(--accent)" : "var(--fg)" }}>{s.label}</span>
+                    {active && <Loader2 size={16} color="var(--accent)" style={{ marginLeft: "auto", animation: "spin 1s linear infinite" }} />}
+                    {done && <span style={{ marginLeft: "auto", color: "var(--green)", fontWeight: "bold", fontSize: "16px" }}>✓</span>}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       )}
 
       {/* ─────────────────────────────── Done */}
       {step === "done" && (
-        <div style={{ textAlign: "center", padding: "40px 20px" }}>
-          <div style={{ width: "64px", height: "64px", borderRadius: "50%", background: "#16a34a18", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px", border: "2px solid #16a34a40" }}>
-            <Check size={28} color="#16a34a" />
-          </div>
-          <h2 style={{ fontSize: "22px", fontWeight: "700", color: "var(--fg)", marginBottom: "8px" }}>Campaign Activated! 🎉</h2>
-          
-          {campaignType === "b2b-leads" ? (
-            <p style={{ fontSize: "13px", color: "var(--fg-muted)", marginBottom: "24px" }}>
-              Successfully scraped and imported <strong>{scrapedCount}</strong> leads matching your ICP settings.
-            </p>
-          ) : (
-            <p style={{ fontSize: "13px", color: "var(--fg-muted)", marginBottom: "24px" }}>
-              Generated <strong>{draftsCount}</strong> organic LinkedIn post drafts.
-            </p>
-          )}
-
-          <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "60vh", padding: "20px 0", width: "100%" }}>
+          <div className="card" style={{ padding: "40px", maxWidth: "540px", width: "100%", textAlign: "center", boxShadow: "0 20px 40px rgba(0,0,0,0.25)", border: "1px solid var(--border)", borderRadius: "16px", background: "var(--bg)" }}>
+            <div style={{ width: "72px", height: "72px", borderRadius: "50%", background: "#16a34a18", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 24px", border: "2px solid #16a34a40" }}>
+              <Check size={36} color="#16a34a" />
+            </div>
+            <h2 style={{ fontSize: "26px", fontWeight: "700", color: "var(--fg)", marginBottom: "12px" }}>Campaign Activated! 🎉</h2>
+            
             {campaignType === "b2b-leads" ? (
-              <button className="btn btn-primary" style={{ width: "100%", padding: "12px" }}
-                onClick={() => router.push(`/dashboard/b2b/vault?tab=leads&campaign=${campaignId}`)}>
-                Go to Leads Vault
-              </button>
+              <p style={{ fontSize: "15px", color: "var(--fg-muted)", marginBottom: "32px", lineHeight: "1.5" }}>
+                Successfully scraped and imported <strong>{scrapedCount}</strong> leads matching your ICP settings.
+              </p>
             ) : (
-              <button className="btn btn-primary" style={{ width: "100%", padding: "12px" }}
-                onClick={() => router.push(`/dashboard/b2b/linkedin?campaign=${campaignId}`)}>
-                View LinkedIn Drafts
-              </button>
+              <p style={{ fontSize: "15px", color: "var(--fg-muted)", marginBottom: "32px", lineHeight: "1.5" }}>
+                Generated <strong>{draftsCount}</strong> organic LinkedIn post drafts.
+              </p>
             )}
-            <button className="btn btn-secondary" style={{ width: "100%", padding: "12px" }}
-              onClick={() => router.push("/dashboard/b2b/campaigns")}>
-              Back to Campaigns
-            </button>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              {campaignType === "b2b-leads" ? (
+                <button className="btn btn-primary" style={{ width: "100%", padding: "14px", fontSize: "15px", fontWeight: "600" }}
+                  onClick={() => router.push(`/dashboard/b2b/vault?tab=leads&campaign=${campaignId}`)}>
+                  Go to Leads Vault
+                </button>
+              ) : (
+                <button className="btn btn-primary" style={{ width: "100%", padding: "14px", fontSize: "15px", fontWeight: "600" }}
+                  onClick={() => router.push(`/dashboard/b2b/linkedin?campaign=${campaignId}`)}>
+                  View LinkedIn Drafts
+                </button>
+              )}
+              <button className="btn btn-secondary" style={{ width: "100%", padding: "14px", fontSize: "15px", fontWeight: "600" }}
+                onClick={() => router.push("/dashboard/b2b/campaigns")}>
+                Back to Campaigns
+              </button>
+            </div>
           </div>
         </div>
       )}
