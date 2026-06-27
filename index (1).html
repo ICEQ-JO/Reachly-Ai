@@ -1,0 +1,2161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reachly — Distribution & Exposure Engine</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/globe.gl"></script>
+<script src="https://unpkg.com/topojson-client@3"></script>
+<style>
+/* ─── Reset & Base ─────────────────────────────────────── */
+*{box-sizing:border-box}
+html,body{scroll-behavior:smooth;margin:0;padding:0;background:#061E29}
+/* Performance: isolate paint layers for heavy sections */
+#gap-section{contain:layout style}
+#gap-sticky{contain:layout style paint}
+#solution-section{contain:layout style paint}
+#audiences{contain:layout style}
+#aud-sticky{contain:layout style paint}
+#b2b-section{contain:layout style paint;content-visibility:auto;contain-intrinsic-size:0 600px}
+#b2c-section{contain:layout style paint;content-visibility:auto;contain-intrinsic-size:0 600px}
+#team{contain:layout style paint;content-visibility:auto;contain-intrinsic-size:0 700px}
+/* GPU-composite canvas elements */
+#gap-canvas,#b2b-canvas,#b2c-canvas{transform:translateZ(0);backface-visibility:hidden}
+/* Remove will-change from elements not currently in animation to free GPU memory */
+.aud-card-scroll{will-change:auto}
+
+.page{
+  font-family:'IBM Plex Sans',system-ui,sans-serif;
+  background:#061E29;
+  color:#F5F5F5;
+  -webkit-font-smoothing:antialiased;
+  overflow-x:clip;
+}
+.display{font-family:'Space Grotesk',sans-serif}
+.mono{font-family:'IBM Plex Mono',monospace}
+.shell{max-width:1180px;margin:0 auto;padding:0 28px;width:100%}
+.sec{padding:120px 0;position:relative}
+.t-mut{color:#88A0AB}
+.t-dim{color:#5E7A86}
+.amber{color:#F2A340}
+.c-owner{color:#88BDA4}
+.c-inv{color:#D8589B}
+.c-creator{color:#9484EC}
+.bg-card{background:#0B2731}
+.eyebrow{letter-spacing:.2em;text-transform:uppercase;font-size:12px;font-weight:500}
+.h-xl{font-size:clamp(40px,6vw,82px);line-height:.98;letter-spacing:-.03em;font-weight:600}
+.h-lg{font-size:clamp(30px,4.4vw,52px);line-height:1.04;letter-spacing:-.025em;font-weight:600}
+.h-md{font-size:clamp(22px,2.6vw,30px);line-height:1.12;letter-spacing:-.02em;font-weight:600}
+.lead{font-size:clamp(16px,1.5vw,19px);line-height:1.62;color:#9DB2BC}
+.card{background:#0B2731;border:1px solid #163844;border-radius:18px}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:13px 22px;border-radius:11px;font-weight:600;font-size:15px;cursor:pointer;text-decoration:none;border:1px solid transparent;transition:transform .15s,background .15s,border-color .15s,box-shadow .2s;white-space:nowrap}
+.btn:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.3)}
+.btn-amber{background:#F2A340;color:#08222b}
+.btn-amber:hover{background:#F4B050;box-shadow:0 8px 28px rgba(242,163,64,.4)}
+.btn-ghost{border-color:#2A5260;color:#F5F5F5;background:rgba(255,255,255,.02)}
+.divider{height:1px;background:#143542}
+a{color:inherit}
+
+/* ─── Scrollbar progress ─────────────────────────────── */
+/* scaleX instead of width — no layout, compositor-only */
+.scrollbar{position:fixed;top:0;left:0;height:3px;width:100%;background:linear-gradient(90deg,#F2A340,#F4C82E);z-index:60;box-shadow:0 0 12px rgba(242,163,64,.55);transform:scaleX(0);transform-origin:left;will-change:transform}
+
+/* ─── Nav ────────────────────────────────────────────── */
+.nav{position:fixed;top:0;left:0;right:0;z-index:50;backdrop-filter:blur(14px);background:rgba(6,30,41,.62);border-bottom:1px solid rgba(255,255,255,.06);transition:background .3s}
+.navin{max-width:1180px;margin:0 auto;padding:14px 28px}
+.navlink{color:#9DB2BC;text-decoration:none;font-size:14.5px;font-weight:500;transition:color .2s}
+.navlink:hover{color:#F5F5F5}
+.logo{width:30px;height:30px;border-radius:9px;background:linear-gradient(140deg,#F2A340,#D8589B 60%,#9484EC);box-shadow:0 0 22px rgba(242,163,64,.35)}
+/* ── Wordmark ── */
+.wordmark{font-family:'Space Grotesk',sans-serif;font-weight:800;letter-spacing:0.07em;text-transform:uppercase;color:#2196F3;line-height:1}
+/* ── Letter-draw animation ── */
+.rl{display:inline-block;opacity:0;transform:translateY(14px) scale(0.92);will-change:transform,opacity}
+.rl.in{animation:letterIn 0.42s cubic-bezier(.22,.68,0,1.2) forwards;animation-delay:calc(var(--i)*0.09s)}
+@keyframes letterIn{to{opacity:1;transform:none}}
+
+/* ─── Hero / Globe ───────────────────────────────────── */
+.hero{position:relative;height:900vh}
+.stage{position:sticky;top:0;height:100vh;overflow:hidden;display:flex;align-items:center;justify-content:center}
+/* will-change promotes the WebGL canvas to its own compositor layer */
+.globe-mount{position:absolute;inset:0;z-index:1;will-change:transform}
+.vign{position:absolute;inset:0;z-index:2;pointer-events:none;background:radial-gradient(120% 90% at 50% 42%,transparent 38%,rgba(6,30,41,.55) 78%,#061E29 100%)}
+.starfield{position:absolute;inset:0;z-index:0;background:
+  radial-gradient(1px 1px at 14% 22%,rgba(255,255,255,.5),transparent),
+  radial-gradient(1px 1px at 78% 14%,rgba(255,255,255,.4),transparent),
+  radial-gradient(1.4px 1.4px at 62% 64%,rgba(242,163,64,.5),transparent),
+  radial-gradient(1px 1px at 33% 78%,rgba(255,255,255,.35),transparent),
+  radial-gradient(1px 1px at 88% 52%,rgba(148,132,236,.45),transparent),
+  radial-gradient(1px 1px at 8% 60%,rgba(255,255,255,.3),transparent),
+  radial-gradient(1.2px 1.2px at 46% 30%,rgba(136,189,164,.4),transparent),
+  radial-gradient(1px 1px at 55% 8%,rgba(255,255,255,.45),transparent),
+  radial-gradient(1px 1px at 92% 78%,rgba(255,255,255,.3),transparent),
+  radial-gradient(1.2px 1.2px at 24% 48%,rgba(255,255,255,.25),transparent),
+  radial-gradient(1px 1px at 70% 90%,rgba(148,132,236,.3),transparent),
+  radial-gradient(1.4px 1.4px at 5% 35%,rgba(136,189,164,.35),transparent)
+}
+
+/* ─── Beats (scroll story) ───────────────────────────── */
+.beats{position:absolute;inset:0;z-index:5;display:flex;align-items:center;justify-content:center;pointer-events:none}
+/* will-change:opacity keeps beat fades on the compositor thread */
+.beat{position:absolute;width:min(760px,90vw);text-align:center;opacity:0;transition:opacity .12s linear;display:flex;flex-direction:column;align-items:center;gap:22px;will-change:opacity}
+.beat .btn{pointer-events:auto}
+.kicker{letter-spacing:.24em;text-transform:uppercase;font-size:13px;font-weight:500;color:#F2A340}
+.beat-lead{max-width:560px}
+
+/* ─── Solution section ───────────────────────────────── */
+#solution-section{background:#050e1c}
+.sol-grid{display:grid;grid-template-columns:1fr 1.15fr;gap:72px;align-items:center}
+@media(max-width:800px){.sol-grid{grid-template-columns:1fr;gap:52px}}
+.sol-super{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.22em;text-transform:uppercase;font-weight:500;color:#2196F3;margin-bottom:18px}
+.sol-headline{font-size:clamp(56px,7.5vw,100px);line-height:.93;letter-spacing:-.035em;font-weight:700;color:#fff;margin:0 0 28px}
+.sol-desc{color:rgba(255,255,255,0.52);font-size:clamp(15px,1.4vw,18px);line-height:1.7;max-width:380px}
+/* Comparison slider */
+.cs-wrap{position:relative;border-radius:22px;overflow:hidden;cursor:ew-resize;user-select:none;touch-action:pan-y;aspect-ratio:1/1.05;max-height:540px;box-shadow:0 32px 80px rgba(0,0,0,0.5),0 0 0 1px rgba(255,255,255,0.06)}
+.cs-panel{position:absolute;inset:0;padding:clamp(24px,3vw,40px) clamp(24px,3vw,40px);display:flex;flex-direction:column;gap:24px;align-items:center;text-align:center}
+.cs-panel-left{background:linear-gradient(145deg,#0b2542 0%,#0a3558 55%,#0c2e4f 100%);z-index:1}
+.cs-panel-right{background:linear-gradient(145deg,#0d1320 0%,#101824 100%);z-index:2;padding-left:clamp(40px,8vw,80px)}
+.cs-chip{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.16em;text-transform:uppercase;font-weight:600;padding:5px 11px;border-radius:100px;display:inline-flex;align-items:center;gap:6px;width:fit-content}
+.cs-chip-blue{background:rgba(33,150,243,0.16);color:#2196F3;border:1px solid rgba(33,150,243,0.28)}
+.cs-chip-red{background:rgba(224,90,58,0.14);color:#E05A3A;border:1px solid rgba(224,90,58,0.24)}
+.cs-headline{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:clamp(19px,2vw,26px);line-height:1.18;letter-spacing:-.02em;color:#fff;margin:0;flex:0 0 auto}
+.cs-divider{width:32px;height:2px;border-radius:2px;opacity:0.25}
+.cs-list{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:11px}
+.cs-list li{font-size:clamp(12px,1.1vw,14px);color:rgba(255,255,255,0.65);display:flex;align-items:flex-start;gap:9px;line-height:1.4}
+.cs-icon{flex-shrink:0;width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;margin-top:1px}
+.cs-icon-check{background:rgba(33,150,243,0.2);color:#2196F3}
+.cs-icon-x{background:rgba(224,90,58,0.18);color:#E05A3A}
+/* Handle */
+.cs-handle-wrap{position:absolute;inset:0;z-index:10;pointer-events:none;will-change:transform}
+.cs-vline{position:absolute;top:0;bottom:0;left:50%;width:1.5px;background:rgba(255,255,255,0.22);transform:translateX(-50%)}
+.cs-knob{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:42px;height:42px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 28px rgba(0,0,0,0.45),0 0 0 4px rgba(255,255,255,0.12);pointer-events:auto;cursor:ew-resize}
+.cs-knob svg{display:block}
+/* Clip mask on right panel — updated by JS */
+.cs-panel-right{clip-path:inset(0 0 0 50%)}
+
+/* ─── B2B section ───────────────────────────────────── */
+#b2b-section{background:#060c18}
+#b2b-canvas{display:block;width:100%;height:420px;border-radius:18px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06)}
+.b2b-features{display:flex;flex-direction:column;gap:13px;margin-top:28px}
+.b2b-feat{display:flex;align-items:center;gap:11px;color:rgba(255,255,255,0.62);font-size:clamp(13px,1.2vw,15px);line-height:1.4}
+.b2b-feat-dot{width:5px;height:5px;border-radius:50%;background:#2196F3;flex-shrink:0}
+.b2b-ai-badge{margin-top:32px;display:inline-flex;align-items:center;gap:8px;padding:7px 16px;background:rgba(33,150,243,0.09);border:1px solid rgba(33,150,243,0.22);border-radius:100px}
+.b2b-ai-badge span{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#2196F3}
+
+/* ── Team section v2 ──────────────────────────────────── */
+.tm2-card{display:flex;flex-direction:column;align-items:center;text-align:center;border-radius:20px;background:#0b1726;border:1px solid rgba(255,255,255,0.07);padding:32px 24px 36px;transition:transform .3s cubic-bezier(.2,.7,.2,1),box-shadow .3s,border-color .3s}
+.tm2-card:hover{transform:translateY(-6px);box-shadow:0 28px 64px rgba(0,0,0,0.45);border-color:rgba(255,255,255,0.13)}
+.tm2-avatar-wrap{width:190px;height:190px;border-radius:50%;padding:4px;background:#0b1726;box-shadow:0 8px 32px rgba(0,0,0,0.5);margin-bottom:22px;flex-shrink:0}
+.tm2-avatar{width:100%;height:100%;border-radius:50%;display:flex;align-items:center;justify-content:center;overflow:hidden;border:2px solid rgba(255,255,255,0.12)}
+.tm2-avatar span{font-family:'Space Grotesk',sans-serif;font-size:38px;font-weight:700;color:rgba(255,255,255,0.7);letter-spacing:-.02em}
+.tm2-avatar img{width:100%;height:100%;object-fit:cover;object-position:top center}
+.tm2-body{display:flex;flex-direction:column;align-items:center;gap:6px;width:100%}
+.tm2-role{font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;margin:0;font-weight:500}
+.tm2-name{font-family:'Space Grotesk',sans-serif;font-size:18px;font-weight:700;color:#fff;margin:2px 0 0;letter-spacing:-.02em}
+.tm2-bio{font-size:13px;line-height:1.65;color:rgba(255,255,255,0.42);margin:8px 0 0;max-width:220px}
+@media(max-width:900px){#team .fade-stagger{grid-template-columns:repeat(2,1fr)!important}}
+@media(max-width:500px){#team .fade-stagger{grid-template-columns:1fr!important}}
+
+/* ─── Gap section ────────────────────────────────────── */
+#gap-section{position:relative;height:500vh;background:#07101e}
+#gap-sticky{position:sticky;top:0;height:100vh;overflow:hidden;background:#07101e}
+#gap-canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+.gap-beats{position:absolute;inset:0;z-index:5;display:flex;align-items:center;justify-content:center;pointer-events:none}
+.gap-beat{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:min(720px,88vw);text-align:center;opacity:0;transition:opacity .14s linear;display:flex;flex-direction:column;align-items:center;gap:20px;will-change:opacity}
+.gap-kicker-blue{letter-spacing:.22em;text-transform:uppercase;font-size:13px;font-weight:600;color:#2196F3}
+.gap-kicker-red{letter-spacing:.22em;text-transform:uppercase;font-size:13px;font-weight:600;color:#E05A3A}
+.gap-stat{display:flex;gap:40px;justify-content:center;margin-top:4px}
+.gap-stat-item{display:flex;flex-direction:column;align-items:center;gap:4px}
+.gap-stat-num{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:clamp(28px,4vw,48px);line-height:1}
+.gap-stat-lbl{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:rgba(255,255,255,0.45)}
+
+/* ─── Scroll hint ────────────────────────────────────── */
+.scroll-hint{position:absolute;bottom:30px;left:50%;transform:translateX(-50%);z-index:6;font-size:11px;letter-spacing:.3em;text-transform:uppercase;color:#5E7A86;display:flex;flex-direction:column;align-items:center;gap:8px}
+.scroll-hint span{width:1px;height:34px;background:linear-gradient(#5E7A86,transparent);animation:drip 1.8s infinite}
+@keyframes drip{0%{opacity:.2;transform:translateY(-6px)}50%{opacity:1}100%{opacity:.2;transform:translateY(6px)}}
+
+/* ─── Pin markers: arc + glassmorphism card ──────────── */
+/* Arc stroke draws in on enter */
+@keyframes pinDraw{from{stroke-dashoffset:300;opacity:0}2%{opacity:1}to{stroke-dashoffset:0;opacity:1}}
+/* Card entrance: rise + fade in */
+@keyframes pinCard{from{opacity:0;transform:translateY(8px) scale(.97)}to{opacity:1;transform:none}}
+/* Live indicator dot breathe */
+@keyframes dotPulse{from{opacity:.45;box-shadow:0 0 4px currentColor}to{opacity:1;box-shadow:0 0 10px currentColor}}
+@keyframes netPulse{0%{opacity:.65;transform:translate(-50%,-50%) scale(1)}100%{opacity:0;transform:translate(-50%,-50%) scale(2.4)}}
+
+/* ─── Node tree ──────────────────────────────────────── */
+.tree{position:relative;width:min(620px,92vw);height:230px;margin-bottom:6px}
+.tree-lines{position:absolute;inset:0;width:100%;height:100%}
+.node{position:absolute;padding:9px 16px;border-radius:11px;font-size:14px;font-weight:600;border:1px solid #1d4451;background:#0B2731;white-space:nowrap}
+.node-root{left:50%;top:0;transform:translateX(-50%);border-color:#F2A340;color:#F2A340;box-shadow:0 0 26px rgba(242,163,64,.25)}
+.node-row{position:absolute;left:0;right:0;bottom:0;display:flex;justify-content:space-between}
+
+/* ─── Pills ──────────────────────────────────────────── */
+.pillrow{display:flex;flex-wrap:wrap;gap:8px}
+.pill{font-size:12.5px;font-weight:500;padding:7px 12px;border-radius:999px;border:1px solid #1d4451;color:#9DB2BC;background:rgba(255,255,255,.015)}
+
+/* ─── Audience cards ─────────────────────────────────── */
+.aud-card{padding:30px;border-radius:20px;background:#0B2731;border:1px solid #163844;display:flex;flex-direction:column;gap:18px;transition:transform .3s cubic-bezier(.2,.7,.2,1),border-color .3s,box-shadow .3s}
+.aud-card:hover{transform:translateY(-6px);box-shadow:0 20px 48px rgba(0,0,0,.35)}
+.aud-ico{width:46px;height:46px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-weight:700;font-family:'Space Grotesk'}
+.flowstep{display:flex;align-items:center;gap:10px;font-size:13.5px;color:#9DB2BC;padding:7px 0;border-top:1px solid #102d38}
+.dotmark{width:7px;height:7px;border-radius:50%;flex:none}
+
+/* ─── Engines ────────────────────────────────────────── */
+.eng{padding:34px;border-radius:22px;border:1px solid #163844;display:flex;flex-direction:column;gap:20px;position:relative;overflow:hidden;transition:transform .3s cubic-bezier(.2,.7,.2,1),border-color .3s,box-shadow .3s}
+.eng-b2b{background:linear-gradient(160deg,#0c2a26,#0B2731 60%)}
+.eng-b2c{background:linear-gradient(160deg,#241226,#0B2731 60%)}
+.eng:hover{transform:translateY(-5px);box-shadow:0 24px 56px rgba(0,0,0,.35)}
+.tag{font-size:12px;font-weight:600;letter-spacing:.08em;padding:5px 11px;border-radius:999px;text-transform:uppercase}
+.feat{display:flex;gap:14px;padding:15px 0;border-top:1px solid #14323d}
+.feat-ic{width:34px;height:34px;border-radius:9px;flex:none;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;font-family:'Space Grotesk'}
+
+/* ─── How it works steps ─────────────────────────────── */
+.step{position:relative;padding:24px;border-radius:16px;background:#0B2731;border:1px solid #163844;flex:1;min-width:180px;transition:transform .3s cubic-bezier(.2,.7,.2,1),border-color .3s,box-shadow .3s}
+.step:hover{transform:translateY(-5px);border-color:#2a5560;box-shadow:0 20px 48px rgba(0,0,0,.3)}
+.step-n{font-family:'Space Grotesk';font-weight:700;font-size:13px;color:#08222b;background:#F2A340;width:26px;height:26px;border-radius:8px;display:flex;align-items:center;justify-content:center;margin-bottom:14px}
+
+/* ─── Tiers ──────────────────────────────────────────── */
+.tier{padding:30px;border-radius:20px;border:1px solid #163844;background:#0B2731;display:flex;flex-direction:column;gap:16px;transition:transform .3s cubic-bezier(.2,.7,.2,1),border-color .3s,box-shadow .3s}
+.tier:hover{transform:translateY(-5px);box-shadow:0 20px 48px rgba(0,0,0,.35)}
+.tier-feat{position:relative;z-index:1;box-shadow:0 0 0 1px #2a5e54,0 24px 60px -24px rgba(136,189,164,.4);background:linear-gradient(170deg,#0e2f2a,#0B2731)}
+.tcheck{display:flex;gap:10px;font-size:14px;color:#9DB2BC;align-items:flex-start}
+.tcheck b{color:#88BDA4;flex:none}
+
+/* ─── Team ───────────────────────────────────────────── */
+.tm{padding:22px;border-radius:16px;background:#0B2731;border:1px solid #163844;display:flex;flex-direction:column;gap:12px;transition:transform .3s cubic-bezier(.2,.7,.2,1),border-color .3s}
+.tm:hover{transform:translateY(-4px);border-color:#2a5560}
+.tm-av{width:54px;height:54px;border-radius:14px;background:linear-gradient(140deg,#143542,#0B2731);border:1px solid #1d4451;display:flex;align-items:center;justify-content:center;font-family:'Space Grotesk';font-weight:700;font-size:18px}
+
+/* ─── CTA ────────────────────────────────────────────── */
+.cta-wrap{position:relative;border-radius:28px;overflow:hidden;border:1px solid #1d4451;background:radial-gradient(120% 160% at 50% 0%,#11323d,#081f29);padding:80px 28px;text-align:center}
+
+/* ─── Stats ──────────────────────────────────────────── */
+.stat{display:flex;flex-direction:column;gap:4px}
+.stat b{font-family:'Space Grotesk';font-size:34px;font-weight:700;letter-spacing:-.02em}
+
+/* ─── Fade reveals ───────────────────────────────────── */
+.fade{opacity:0;transform:translateY(26px);transition:opacity .7s cubic-bezier(.2,.7,.2,1),transform .7s cubic-bezier(.2,.7,.2,1)}
+.fade.in{opacity:1;transform:none}
+.fade-stagger>*{opacity:0;transform:translateY(24px);transition:opacity .6s cubic-bezier(.2,.7,.2,1),transform .6s cubic-bezier(.2,.7,.2,1)}
+.fade-stagger.in>*{opacity:1;transform:none}
+.fade-stagger.in>*:nth-child(1){transition-delay:.04s}
+.fade-stagger.in>*:nth-child(2){transition-delay:.12s}
+.fade-stagger.in>*:nth-child(3){transition-delay:.2s}
+.fade-stagger.in>*:nth-child(4){transition-delay:.28s}
+.fade-stagger.in>*:nth-child(5){transition-delay:.36s}
+.fade-stagger.in>*:nth-child(6){transition-delay:.44s}
+/* Audience cards — scroll-driven lift, no transition (driven by applyScroll) */
+.aud-card-scroll{opacity:0;transform:translateY(44px);will-change:transform,opacity}
+
+/* ─── Slide-in from left/right ───────────────────────── */
+.slide-left{opacity:0;transform:translateX(-40px);transition:opacity .8s cubic-bezier(.2,.7,.2,1),transform .8s cubic-bezier(.2,.7,.2,1)}
+.slide-left.in{opacity:1;transform:none}
+.slide-right{opacity:0;transform:translateX(40px);transition:opacity .8s cubic-bezier(.2,.7,.2,1),transform .8s cubic-bezier(.2,.7,.2,1)}
+.slide-right.in{opacity:1;transform:none}
+
+/* ─── Scale in ───────────────────────────────────────── */
+.scale-in{opacity:0;transform:scale(.92);transition:opacity .7s cubic-bezier(.2,.7,.2,1),transform .7s cubic-bezier(.2,.7,.2,1)}
+.scale-in.in{opacity:1;transform:scale(1)}
+
+/* ─── Architecture ───────────────────────────────────── */
+.archline{position:absolute;left:0;right:0;top:50%;height:1px;background:linear-gradient(90deg,transparent,#1d4451,transparent)}
+.archnode{position:relative;z-index:1;background:#0B2731;border:1px solid #163844;border-radius:14px;padding:18px 14px;text-align:center;flex:1;min-width:120px;transition:transform .3s cubic-bezier(.2,.7,.2,1),border-color .3s,box-shadow .3s}
+.archnode:hover{transform:translateY(-5px);border-color:#2a5560;box-shadow:0 16px 40px rgba(0,0,0,.35)}
+.archwrap{position:relative;contain:layout paint}
+/* translateX instead of left — compositor-only, no layout */
+.archpulse{position:absolute;top:50%;left:0;width:13px;height:13px;border-radius:50%;background:#F2A340;box-shadow:0 0 16px 5px rgba(242,163,64,.65);transform:translate3d(0,-50%,0);z-index:0;will-change:transform,opacity;animation:archMove 4.6s linear infinite}
+@keyframes archMove{0%{transform:translate3d(0,-50%,0);opacity:0}10%{opacity:1}90%{opacity:1}100%{transform:translate3d(var(--arch-end,900px),-50%,0);opacity:0}}
+
+/* ─── Counter animation ──────────────────────────────── */
+.count{font-variant-numeric:tabular-nums}
+
+/* ─── Hover glow on cards ────────────────────────────── */
+.glow-hover{transition:box-shadow .3s}
+.glow-hover:hover{box-shadow:0 0 0 1px rgba(242,163,64,.3),0 20px 50px rgba(0,0,0,.4)}
+
+/* ─── Parallax sections ──────────────────────────────── */
+.parallax-bg{position:absolute;inset:-40px;z-index:0;pointer-events:none;will-change:transform}
+
+/* ─── Section gradient overlays for depth ────────────── */
+.sec-gradient::before{content:'';position:absolute;inset:0;background:inherit;pointer-events:none}
+
+/* ─── Animated line draw for features ───────────────────*/
+.line-draw{stroke-dasharray:1000;stroke-dashoffset:1000;transition:stroke-dashoffset 1.4s cubic-bezier(.4,0,.2,1)}
+.line-draw.in{stroke-dashoffset:0}
+
+/* ─── Flowing dots on flow steps ─────────────────────── */
+.flow-connector{position:relative;display:flex;align-items:center;gap:0}
+.flow-dot{width:8px;height:8px;border-radius:50%;background:#F2A340;position:absolute;animation:flowPulse 2.4s ease-in-out infinite}
+@keyframes flowPulse{0%,100%{opacity:.3;transform:scale(.8)}50%{opacity:1;transform:scale(1.2)}}
+
+/* ─── Marquee ticker ─────────────────────────────────── */
+.marquee-wrap{overflow:hidden;position:relative;border-top:1px solid #143542;border-bottom:1px solid #143542;padding:14px 0;background:rgba(8,32,41,.4)}
+.marquee-track{display:flex;gap:60px;animation:marquee 28s linear infinite;width:max-content}
+.marquee-track:hover{animation-play-state:paused}
+.marquee-item{font-family:'IBM Plex Mono',monospace;font-size:13px;color:#5E7A86;white-space:nowrap;letter-spacing:.06em;display:flex;align-items:center;gap:12px}
+.marquee-item::before{content:'◆';color:#F2A340;font-size:8px}
+@keyframes marquee{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+
+/* ─── Highlight pulse for Jordan/Palestine ───────────── */
+.region-callout{display:flex;align-items:center;gap:10px;padding:10px 16px;border-radius:12px;background:rgba(242,163,64,.08);border:1px solid rgba(242,163,64,.2);font-size:13.5px;color:#F2A340;font-weight:500}
+.region-pulse{width:10px;height:10px;border-radius:50%;background:#F2A340;box-shadow:0 0 0 0 rgba(242,163,64,.4);animation:regionPulse 2s infinite}
+@keyframes regionPulse{0%{box-shadow:0 0 0 0 rgba(242,163,64,.5)}70%{box-shadow:0 0 0 8px rgba(242,163,64,0)}100%{box-shadow:0 0 0 0 rgba(242,163,64,0)}}
+
+/* ─── Grid helpers ───────────────────────────────────── */
+.grid{display:grid}
+.fx{display:flex}
+.fx.col{flex-direction:column}
+.ac{align-items:center}
+.jb{justify-content:space-between}
+.jc{justify-content:center}
+.wrap{flex-wrap:wrap}
+.gap8{gap:8px}
+.gap10{gap:10px}
+.gap12{gap:12px}
+.gap16{gap:16px}
+.gap24{gap:24px}
+.gap28{gap:28px}
+.gap40{gap:40px}
+.fw6{font-weight:600}
+.fw7{font-weight:700}
+.fs12{font-size:12px}
+.fs13{font-size:13px}
+.fs14{font-size:14px}
+.fs15{font-size:15px}
+.fs16{font-size:16px}
+.fs20{font-size:20px}
+.fs14{font-size:14px}
+
+/* ─── Smooth entry for page load ─────────────────────── */
+@keyframes pageIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.page{animation:pageIn .6s cubic-bezier(.2,.7,.2,1) both}
+</style>
+</head>
+<body>
+<div class="page">
+
+<!-- ░ Scrollbar ░ -->
+<div class="scrollbar" id="scrollbar"></div>
+
+<!-- ░ Nav ░ -->
+<header class="nav">
+  <div class="navin fx ac jb">
+    <div class="fx ac gap10">
+      <span class="wordmark" style="font-size:26px">Reachly</span>
+    </div>
+    <nav class="fx ac gap24" style="display:flex">
+      <a class="navlink" href="#audiences">Audiences</a>
+      <a class="navlink" href="#b2b-section">B2B</a>
+      <a class="navlink" href="#b2c-section">B2C</a>
+      <a class="navlink" href="/login">Login</a>
+    </nav>
+    <a class="btn btn-amber" href="/login">Get started</a>
+  </div>
+</header>
+
+<!-- ░░░ HERO / GLOBE ░░░ -->
+<section id="reachly-hero" class="hero" data-screen-label="Hero / Globe">
+  <div class="stage">
+    <div class="starfield"></div>
+    <div id="reachly-globe" class="globe-mount"></div>
+    <!-- Pin overlay: positioned by getScreenCoords each rAF frame -->
+    <div id="pins-overlay" style="position:absolute;inset:0;z-index:3;pointer-events:none;overflow:hidden"></div>
+    <!-- Net canvas: connection lines drawn each rAF — CSS size matches pixel resolution via JS -->
+    <canvas id="net-canvas" style="position:absolute;top:0;left:0;z-index:3;pointer-events:none;opacity:0;transition:opacity 0.7s"></canvas>
+    <!-- Net node overlay: DOM circles positioned via getScreenCoords -->
+    <div id="net-overlay" style="position:absolute;inset:0;z-index:4;pointer-events:none;overflow:hidden"></div>
+    <div class="vign"></div>
+
+    <div class="beats">
+      <div data-beat class="beat" style="opacity:1">
+        <p class="kicker">Distribution & exposure engine</p>
+        <h1 class="display h-xl">Get your product<br><span class="amber">seen</span></h1>
+        <p class="lead beat-lead">Reachly puts your SaaS or PaaS in front of the people who matter — buyers, investors, and creators — then runs the outreach for you.</p>
+        <div class="fx gap12">
+          <a class="btn btn-amber" href="#cta">Launch a product</a>
+          <a class="btn btn-ghost" href="#flow">See how it works</a>
+        </div>
+      </div>
+
+      <div data-beat class="beat">
+        <h2 class="display h-lg">Most great products<br>never leave their backyard.</h2>
+      </div>
+
+      <div data-beat class="beat">
+        <p class="kicker">Local-first</p>
+        <h2 class="display h-lg">So we start where we are —<br><span class="amber">Jordan & Palestine.</span></h2>
+        <div class="fx gap12 ac" style="justify-content:center;margin-top:6px">
+          <span class="region-callout"><span class="region-pulse"></span>Amman · Ramallah · our roots</span>
+        </div>
+      </div>
+
+      <div data-beat class="beat">
+        <h2 class="display h-lg">Drop a pin.<br>Then scale out — <span class="c-owner">MENA</span>, then <span class="amber">global.</span></h2>
+      </div>
+
+      <div data-beat class="beat">
+        <h2 class="display h-md t-mut">Connecting the people who build, fund &amp; amplify.</h2>
+      </div>
+
+      <div data-beat class="beat">
+        <p class="kicker">25+ already here</p>
+        <h2 class="display h-lg" style="color:#FFFFFF;line-height:1.08;letter-spacing:-0.01em;text-shadow:0 2px 16px rgba(0,0,0,0.6)">Meet <span id="reachly-draw" style="color:#2196F3;letter-spacing:0.06em;font-size:1.55em;text-shadow:0 0 60px rgba(33,150,243,0.55),0 0 20px rgba(33,150,243,0.3)"><span class="rl" style="--i:0">R</span><span class="rl" style="--i:1">e</span><span class="rl" style="--i:2">a</span><span class="rl" style="--i:3">c</span><span class="rl" style="--i:4">h</span><span class="rl" style="--i:5">l</span><span class="rl" style="--i:6">y</span></span></h2>
+      </div>
+    </div>
+
+    <div class="scroll-hint mono">scroll<span></span></div>
+  </div>
+</section>
+
+<!-- ░ Marquee ticker ░ -->
+<div class="marquee-wrap">
+  <div class="marquee-track">
+    <span class="marquee-item">Jordan & Palestine</span>
+    <span class="marquee-item">Distribution Engine</span>
+    <span class="marquee-item">B2B Lead Scraping</span>
+    <span class="marquee-item">Creator Clipping</span>
+    <span class="marquee-item">Investor Matching</span>
+    <span class="marquee-item">MENA Expansion</span>
+    <span class="marquee-item">AI Content Engine</span>
+    <span class="marquee-item">Apollo + Apify Pipeline</span>
+    <span class="marquee-item">Supabase Storage</span>
+    <span class="marquee-item">Global Reach</span>
+    <!-- duplicate for seamless loop -->
+    <span class="marquee-item">Jordan & Palestine</span>
+    <span class="marquee-item">Distribution Engine</span>
+    <span class="marquee-item">B2B Lead Scraping</span>
+    <span class="marquee-item">Creator Clipping</span>
+    <span class="marquee-item">Investor Matching</span>
+    <span class="marquee-item">MENA Expansion</span>
+    <span class="marquee-item">AI Content Engine</span>
+    <span class="marquee-item">Apollo + Apify Pipeline</span>
+    <span class="marquee-item">Supabase Storage</span>
+    <span class="marquee-item">Global Reach</span>
+  </div>
+</div>
+
+<!-- ░░░ GAP SECTION ░░░ -->
+<section id="gap-section">
+  <div id="gap-sticky">
+    <canvas id="gap-canvas"></canvas>
+    <div class="gap-beats">
+
+      <div data-gap-beat class="gap-beat">
+        <p class="gap-kicker-blue">The execution layer</p>
+        <h2 class="display h-lg" style="color:#fff">Building has never<br>been easier</h2>
+        <p class="lead beat-lead" style="color:rgba(255,255,255,0.55)">AI tools, no-code platforms, and open APIs have put the power to build anything into everyone's hands.</p>
+      </div>
+
+      <div data-gap-beat class="gap-beat">
+        <p class="gap-kicker-red">The distribution layer</p>
+        <h2 class="display h-lg" style="color:#fff">But organic reach<br>is <span style="color:#E05A3A">collapsing</span></h2>
+        <p class="lead beat-lead" style="color:rgba(255,255,255,0.55)">Algorithmic walls, rising noise, and saturated channels have made discovery nearly impossible.</p>
+      </div>
+
+      <div data-gap-beat class="gap-beat">
+        <h2 class="display h-lg" style="color:#fff">The gap is<br><span style="color:#E05A3A">widening</span> every year</h2>
+      </div>
+
+      <div data-gap-beat class="gap-beat">
+        <h2 class="display h-lg" style="color:#fff">Most great products<br>die <span style="color:#E05A3A">in the gap</span></h2>
+        <p class="lead beat-lead" style="color:rgba(255,255,255,0.55)">Not because they weren't good enough.<br>Because nobody knew they existed.</p>
+      </div>
+
+      <div data-gap-beat class="gap-beat">
+        <h2 class="display h-lg" style="color:#fff"><span style="color:#2196F3">Reachly</span> closes<br>the gap</h2>
+        <p class="lead beat-lead" style="color:rgba(255,255,255,0.55)">We connect your product to the people who need it — buyers, investors, and creators — automatically.</p>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ░░░ SOLUTION SECTION ░░░ -->
+<section id="solution-section" class="sec" style="padding:140px 0">
+  <div class="shell">
+    <div class="sol-grid">
+
+      <!-- Left: headline + description -->
+      <div class="fade">
+        <p class="sol-super">The Solution</p>
+        <h2 class="display sol-headline">Our<br>Solution</h2>
+        <p class="sol-desc">We help Palestinian and Jordanian startup owners in various ways — from finding your exact audience to running the full distribution pipeline for you.</p>
+      </div>
+
+      <!-- Right: comparison slider -->
+      <div class="fade" style="transition-delay:.12s">
+        <div id="compare-slider" class="cs-wrap">
+
+          <!-- Left panel: WITH REACHLY -->
+          <div class="cs-panel cs-panel-left">
+            <div class="cs-chip cs-chip-blue">
+              <svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor"><circle cx="4" cy="4" r="4"/></svg>
+              With Reachly
+            </div>
+            <h3 class="cs-headline">We find your audience<br>&amp; market to them<br>directly.</h3>
+            <div class="cs-divider" style="background:#2196F3"></div>
+            <ul class="cs-list">
+              <li><span class="cs-icon cs-icon-check">✓</span>Audience auto-identified for you</li>
+              <li><span class="cs-icon cs-icon-check">✓</span>Direct B2B &amp; B2C outreach pipeline</li>
+              <li><span class="cs-icon cs-icon-check">✓</span>Matched with relevant investors</li>
+              <li><span class="cs-icon cs-icon-check">✓</span>Creator campaigns on autopilot</li>
+              <li><span class="cs-icon cs-icon-check">✓</span>Zero cold-start, day one traction</li>
+            </ul>
+          </div>
+
+          <!-- Right panel: ON YOUR OWN -->
+          <div class="cs-panel cs-panel-right">
+            <div class="cs-chip cs-chip-red">
+              <svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor"><circle cx="4" cy="4" r="4"/></svg>
+              On Your Own
+            </div>
+            <h3 class="cs-headline">You sell to other<br>businesses or<br>customers.</h3>
+            <div class="cs-divider" style="background:#E05A3A"></div>
+            <ul class="cs-list">
+              <li><span class="cs-icon cs-icon-x">✗</span>Months finding the right market</li>
+              <li><span class="cs-icon cs-icon-x">✗</span>Cold outreach with no system</li>
+              <li><span class="cs-icon cs-icon-x">✗</span>Locked inside your own network</li>
+              <li><span class="cs-icon cs-icon-x">✗</span>No structured investor access</li>
+              <li><span class="cs-icon cs-icon-x">✗</span>Great products go unnoticed</li>
+            </ul>
+          </div>
+
+          <!-- Drag handle -->
+          <div class="cs-handle-wrap" id="cs-handle-wrap">
+            <div class="cs-vline" id="cs-vline"></div>
+            <div class="cs-knob" id="cs-knob">
+              <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+                <path d="M8 6L3 11L8 16" stroke="#1a1a2e" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M14 6L19 11L14 16" stroke="#1a1a2e" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ░░░ AUDIENCES ░░░ -->
+<section id="audiences" style="position:relative;height:380vh;background:#050e1c" data-screen-label="Audiences">
+  <div id="aud-sticky" style="position:sticky;top:0;height:100vh;display:flex;flex-direction:column;justify-content:center;overflow:hidden">
+    <div class="shell">
+      <div style="max-width:680px;margin-bottom:44px">
+        <p class="eyebrow amber mono">Three sides, one network</p>
+        <h2 class="display h-lg" style="margin:14px 0 16px">Built for the people who move products</h2>
+        <p class="lead">Everyone enters the same network from a different door. Reachly routes each one to the right workflow automatically.</p>
+      </div>
+      <div class="grid" style="grid-template-columns:repeat(3,1fr);gap:20px">
+        <div class="aud-card aud-card-scroll">
+          <div class="fx ac jb">
+            <div class="aud-ico" style="background:rgba(136,189,164,.14);color:#88BDA4">P</div>
+            <span class="mono fs12 t-dim">01</span>
+          </div>
+          <div>
+            <h3 class="display h-md c-owner">Product Owner</h3>
+            <p class="lead fs14" style="margin-top:8px">Bring a SaaS or PaaS. Get auto-classified, pick a growth track, and let agents run distribution live.</p>
+          </div>
+          <div>
+            <div class="flowstep" style="border-top:none"><span class="dotmark" style="background:#88BDA4"></span>Onboard & submit product</div>
+            <div class="flowstep"><span class="dotmark" style="background:#88BDA4"></span>Auto-classify · B2B / B2C</div>
+            <div class="flowstep"><span class="dotmark" style="background:#88BDA4"></span>Pick growth track</div>
+            <div class="flowstep"><span class="dotmark" style="background:#88BDA4"></span>Agents run live · review & launch</div>
+          </div>
+        </div>
+
+        <div class="aud-card aud-card-scroll">
+          <div class="fx ac jb">
+            <div class="aud-ico" style="background:rgba(216,88,155,.14);color:#D8589B">I</div>
+            <span class="mono fs12 t-dim">02</span>
+          </div>
+          <div>
+            <h3 class="display h-md c-inv">Investor</h3>
+            <p class="lead fs14" style="margin-top:8px">Build a thesis profile and get ranked, AI-matched products with decks ready to review.</p>
+          </div>
+          <div>
+            <div class="flowstep" style="border-top:none"><span class="dotmark" style="background:#D8589B"></span>Build investor profile</div>
+            <div class="flowstep"><span class="dotmark" style="background:#D8589B"></span>Ranked product matches</div>
+            <div class="flowstep"><span class="dotmark" style="background:#D8589B"></span>Review deck · request intro</div>
+            <div class="flowstep"><span class="dotmark" style="background:#D8589B"></span>Connect with founder</div>
+          </div>
+        </div>
+
+        <div class="aud-card aud-card-scroll">
+          <div class="fx ac jb">
+            <div class="aud-ico" style="background:rgba(148,132,236,.16);color:#9484EC">C</div>
+            <span class="mono fs12 t-dim">03</span>
+          </div>
+          <div>
+            <h3 class="display h-md c-creator">Creator</h3>
+            <p class="lead fs14" style="margin-top:8px">Link your socials, claim assets from live campaigns, post clips, and get paid on the numbers you put up.</p>
+          </div>
+          <div>
+            <div class="flowstep" style="border-top:none"><span class="dotmark" style="background:#9484EC"></span>Link socials</div>
+            <div class="flowstep"><span class="dotmark" style="background:#9484EC"></span>Browse campaigns · claim assets</div>
+            <div class="flowstep"><span class="dotmark" style="background:#9484EC"></span>Post clips</div>
+            <div class="flowstep"><span class="dotmark" style="background:#9484EC"></span>Stats → payout</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ░░░ B2B SECTION ░░░ -->
+<section id="b2b-section" class="sec" style="padding:120px 0">
+  <div class="shell">
+    <div class="sol-grid">
+
+      <!-- Left: text -->
+      <div class="fade">
+        <p class="eyebrow mono" style="color:#2196F3;margin-bottom:16px">B2B Outreach</p>
+        <h2 class="display h-lg" style="color:#fff;margin:0 0 20px">Reach business<br>buyers directly</h2>
+        <p class="lead" style="color:rgba(255,255,255,0.52);max-width:380px">Our AI identifies your ideal business customers and sends hyper-personalized outreach at scale — completely on autopilot.</p>
+        <div class="b2b-features">
+          <div class="b2b-feat"><span class="b2b-feat-dot"></span>AI-personalized cold emails</div>
+          <div class="b2b-feat"><span class="b2b-feat-dot"></span>Targeted to decision-makers only</div>
+          <div class="b2b-feat"><span class="b2b-feat-dot"></span>Multi-step follow-up sequences</div>
+          <div class="b2b-feat"><span class="b2b-feat-dot"></span>Lead qualification &amp; scoring</div>
+        </div>
+        <div class="b2b-ai-badge">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <circle cx="7" cy="7" r="6" fill="rgba(33,150,243,0.25)" stroke="#2196F3" stroke-width="1.2"/>
+            <path d="M4.5 7l1.8 1.8 3.2-3.6" stroke="#2196F3" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span>Powered by AI</span>
+        </div>
+      </div>
+
+      <!-- Right: animated canvas -->
+      <div class="fade" style="transition-delay:.12s">
+        <canvas id="b2b-canvas"></canvas>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ░░░ B2C SECTION ░░░ -->
+<section id="b2c-section" class="sec" style="background:#060c18;padding:120px 0">
+  <div class="shell">
+    <div class="sol-grid" style="direction:rtl">
+
+      <!-- Right: animated canvas (visually left because of rtl trick) -->
+      <div class="fade" style="direction:ltr">
+        <canvas id="b2c-canvas" style="display:block;width:100%;height:420px;border-radius:18px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06)"></canvas>
+      </div>
+
+      <!-- Left: text -->
+      <div class="fade" style="transition-delay:.12s;direction:ltr">
+        <p class="eyebrow mono" style="color:#E1306C;margin-bottom:16px">B2C Outreach</p>
+        <h2 class="display h-lg" style="color:#fff;margin:0 0 20px">Reach real people,<br>everywhere</h2>
+        <p class="lead" style="color:rgba(255,255,255,0.52);max-width:380px">Our AI publishes platform-native content across social channels — turning your product into posts, stories, and threads that reach real buyers.</p>
+        <div class="b2b-features">
+          <div class="b2b-feat"><span class="b2b-feat-dot" style="background:#E1306C"></span>Platform-native content generation</div>
+          <div class="b2b-feat"><span class="b2b-feat-dot" style="background:#E1306C"></span>Facebook, Instagram &amp; Reddit campaigns</div>
+          <div class="b2b-feat"><span class="b2b-feat-dot" style="background:#E1306C"></span>Community-driven organic growth</div>
+          <div class="b2b-feat"><span class="b2b-feat-dot" style="background:#E1306C"></span>Real-time analytics &amp; optimization</div>
+        </div>
+        <div class="b2b-ai-badge" style="border-color:rgba(225,48,108,0.25);background:rgba(225,48,108,0.08);margin-top:32px">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <circle cx="7" cy="7" r="6" fill="rgba(225,48,108,0.25)" stroke="#E1306C" stroke-width="1.2"/>
+            <path d="M4.5 7l1.8 1.8 3.2-3.6" stroke="#E1306C" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span style="color:#E1306C">Powered by AI</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+
+<!-- ░░░ TEAM ░░░ -->
+<section id="team" style="background:#07101e;padding:120px 0 140px">
+  <div class="shell">
+    <div class="fade" style="text-align:center;margin-bottom:80px">
+      <p class="eyebrow mono" style="color:#2196F3;margin-bottom:14px;justify-content:center">The Team</p>
+      <h2 class="display" style="font-size:clamp(38px,5.5vw,68px);font-weight:700;letter-spacing:-.03em;color:#fff;margin:0">The people behind Reachly</h2>
+    </div>
+    <div class="fade-stagger" style="display:grid;grid-template-columns:repeat(4,1fr);gap:28px;align-items:start">
+
+      <!-- Ameen -->
+      <div class="tm2-card">
+        <div class="tm2-avatar-wrap">
+          <div class="tm2-avatar">
+            <img src="ameen.png" alt="Ameen Alrawabdeh">
+          </div>
+        </div>
+        <div class="tm2-body">
+          <p class="tm2-role" style="color:#2196F3">Software Engineer</p>
+          <h3 class="tm2-name">Ameen Alrawabdeh</h3>
+          <p class="tm2-bio">Builds the core platform and AI agent pipelines that power Reachly's outreach engine.</p>
+        </div>
+      </div>
+
+      <!-- Mohammad -->
+      <div class="tm2-card">
+        <div class="tm2-avatar-wrap">
+          <div class="tm2-avatar">
+            <img src="mohammad.png" alt="Mohammad Almuhaisen">
+          </div>
+        </div>
+        <div class="tm2-body">
+          <p class="tm2-role" style="color:#88BDA4">System Design / Data Pipeline</p>
+          <h3 class="tm2-name">Mohammad Almuhaisen</h3>
+          <p class="tm2-bio">Owns the data pipeline — lead scraping, enrichment, and keeping the intelligence layer sharp.</p>
+        </div>
+      </div>
+
+      <!-- Lana -->
+      <div class="tm2-card">
+        <div class="tm2-avatar-wrap">
+          <div class="tm2-avatar">
+            <img src="lana.png" alt="Lana Musaffer">
+          </div>
+        </div>
+        <div class="tm2-body">
+          <p class="tm2-role" style="color:#9484EC">Product & Design</p>
+          <h3 class="tm2-name">Lana Musaffer</h3>
+          <p class="tm2-bio">Shapes the product experience so founders can focus on building, not figuring out the tool.</p>
+        </div>
+      </div>
+
+      <!-- Khalid -->
+      <div class="tm2-card">
+        <div class="tm2-avatar-wrap">
+          <div class="tm2-avatar">
+            <img src="khalid.png" alt="Khalid Khudari">
+          </div>
+        </div>
+        <div class="tm2-body">
+          <p class="tm2-role" style="color:#F2A340">AI Lead</p>
+          <h3 class="tm2-name">Khalid Khudari</h3>
+          <p class="tm2-bio">Drives the go-to-market strategy and fine-tunes the AI models that personalise every campaign.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ░ Footer ░ -->
+<footer style="border-top:1px solid #102d38;padding:36px 0">
+  <div class="shell fx ac jb wrap gap16">
+    <div class="fx ac gap10">
+      <span class="wordmark" style="font-size:16px">Reachly</span>
+    </div>
+    <p class="mono fs12 t-dim">Built for the Microsoft Hackathon · Jordan & Palestine, then the world</p>
+  </div>
+</footer>
+
+</div><!-- .page -->
+
+<style>
+@keyframes ringPulse{0%{opacity:1;transform:translate(-50%,-50%) scale(.8)}100%{opacity:0;transform:translate(-50%,-50%) scale(1.4)}}
+</style>
+
+<script>
+/* ── Globe ─────────────────────────────────────────────────────── */
+let world = null;
+let tries = 0;
+let countries = [];
+
+/* ── Pin overlay (DOM-based, driven by getScreenCoords) ──────────*/
+let pinsOverlay = null;
+let cachedPinEls = null;   // [jordanEl, palestineEl]
+let pinsVisible = false;
+
+/* ── Network overlay (globe-surface circles) ─────────────────────*/
+let netOverlay = null;
+let netCanvas2d = null;
+let netCtx = null;
+let netEls = null;
+let netVisible = false;
+let cachedNetPts = []; // screen-coords cached on scroll change, reused by tracer loop
+
+const NET_TYPES = {
+  B2B: { color:'#88BDA4', glow:'rgba(136,189,164,0.5)', r:22 },
+  B2C: { color:'#9484EC', glow:'rgba(148,132,236,0.5)', r:22 },
+  INV: { color:'#D8589B', glow:'rgba(216,88,155,0.5)',  r:26 },
+  CRE: { color:'#F2A340', glow:'rgba(242,163,64,0.5)',  r:20 }
+};
+
+// 25 users — spread across the full Jordan & Palestine geography
+const NET_DEFS = [
+  // B2B: Jordan tech hubs (Amman, Irbid, Zarqa, south & east)
+  {t:'B2B',n:'Ahmad S.',  s:'DevTools',   lat:31.95, lng:35.93},  // Amman
+  {t:'B2B',n:'Sara K.',   s:'Fintech',    lat:32.55, lng:35.85},  // Irbid
+  {t:'B2B',n:'Omar K.',   s:'HR SaaS',    lat:32.08, lng:36.08},  // Zarqa
+  {t:'B2B',n:'Rania T.',  s:'Analytics',  lat:30.19, lng:35.73},  // Ma'an
+  {t:'B2B',n:'Karim A.',  s:'CRM',        lat:32.04, lng:35.72},  // Salt
+  {t:'B2B',n:'Dina H.',   s:'Logistics',  lat:29.53, lng:35.00},  // Aqaba
+  {t:'B2B',n:'Nour F.',   s:'EdTech',     lat:32.35, lng:36.65},  // Mafraq
+  {t:'B2B',n:'Tariq R.',  s:'Security',   lat:31.18, lng:37.20},  // Eastern Jordan
+  // B2C: Palestine cities + western Jordan
+  {t:'B2C',n:'Yasmine L.',s:'Social',     lat:31.90, lng:35.20},  // Ramallah
+  {t:'B2C',n:'Hassan B.', s:'Gaming',     lat:32.22, lng:35.26},  // Nablus
+  {t:'B2C',n:'Aya N.',    s:'Commerce',   lat:31.86, lng:35.46},  // Jericho
+  {t:'B2C',n:'Ziad W.',   s:'Health',     lat:31.53, lng:34.45},  // Gaza
+  {t:'B2C',n:'Hana S.',   s:'Travel',     lat:31.70, lng:35.20},  // Bethlehem
+  {t:'B2C',n:'Khalid J.', s:'Food',       lat:32.46, lng:35.60},  // Jenin
+  {t:'B2C',n:'Mona E.',   s:'Fashion',    lat:31.53, lng:35.10},  // Hebron
+  // INV: investors spread across Jordan
+  {t:'INV',n:'Venture MENA',s:'Ser A–C', lat:31.90, lng:36.80},
+  {t:'INV',n:'Gulf Capital', s:'Pre-seed',lat:32.55, lng:36.20},
+  {t:'INV',n:'Horizon VC',   s:'Seed',   lat:30.50, lng:37.00},
+  {t:'INV',n:'TechAngels',   s:'Angel',  lat:32.00, lng:37.50},
+  {t:'INV',n:'MENA Fund',    s:'Ser A',  lat:31.20, lng:36.10},
+  // CRE: creators spread wide
+  {t:'CRE',n:'Nadia T.',  s:'420K',     lat:33.00, lng:35.70},
+  {t:'CRE',n:'Ali B.',    s:'280K',     lat:31.00, lng:34.90},
+  {t:'CRE',n:'Sara A.',   s:'550K',     lat:30.80, lng:35.60},
+  {t:'CRE',n:'Yousef M.', s:'190K',     lat:32.85, lng:36.80},
+  {t:'CRE',n:'Haya K.',   s:'380K',     lat:31.50, lng:36.95}
+];
+
+const NET_CONNS = [
+  [0,15],[0,16],[1,15],[1,18],[2,16],[2,17],[3,17],[3,19],
+  [4,18],[4,15],[5,19],[5,16],[6,17],[7,18],
+  [8,20],[8,21],[9,21],[9,22],[10,22],[10,23],[11,23],[11,24],
+  [12,24],[12,20],[13,20],[14,21],[8,16],[10,17],[12,15]
+];
+
+const NET_TRACERS = NET_CONNS.map(() => ({p: Math.random(), spd: 0.008 + Math.random() * 0.006}));
+
+function mountNetOverlay() {
+  if (!netOverlay) return null;
+  netOverlay.innerHTML = '';
+  return NET_DEFS.map(def => {
+    const cfg = NET_TYPES[def.t];
+    const d = cfg.r * 2;
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'position:absolute;top:0;left:0;width:0;height:0;will-change:transform,opacity;pointer-events:none';
+    wrap.innerHTML = `
+      <!-- Name label ABOVE the circle -->
+      <div style="position:absolute;bottom:${cfg.r+8}px;left:50%;transform:translateX(-50%);
+                  white-space:nowrap;text-align:center;pointer-events:none">
+        <div style="font-size:9px;font-weight:700;color:#0d1b2a;font-family:'Space Grotesk',sans-serif;
+                    letter-spacing:0.02em;line-height:1.3">${def.n}</div>
+        <div style="font-size:7.5px;color:#1a3048;font-family:'IBM Plex Mono',monospace;opacity:0.8">${def.s}</div>
+      </div>
+      <!-- Solid filled circle -->
+      <div style="position:absolute;width:${d}px;height:${d}px;border-radius:50%;
+                  background:${cfg.color};border:2px solid rgba(255,255,255,0.35);
+                  transform:translate(-50%,-50%);display:flex;align-items:center;justify-content:center;
+                  box-shadow:0 0 ${cfg.r*1.4}px ${cfg.color}88,0 2px 8px rgba(0,0,0,0.25)">
+        <!-- Outer pulse ring -->
+        <div style="position:absolute;width:${d+14}px;height:${d+14}px;border-radius:50%;
+                    border:1.5px solid ${cfg.color}70;top:50%;left:50%;
+                    transform:translate(-50%,-50%);
+                    animation:netPulse ${1.8 + Math.random() * 0.8}s ease-out infinite"></div>
+        <!-- Letter initial -->
+        <span style="color:#fff;font-weight:800;font-size:${cfg.r*0.58}px;
+                     font-family:'Space Grotesk',sans-serif;line-height:1">${def.n[0]}</span>
+      </div>`;
+    netOverlay.appendChild(wrap);
+    return wrap;
+  });
+}
+
+function drawNetCanvas() {
+  if (!netCtx || !netCanvas2d) return;
+  const pts = cachedNetPts; // use positions computed in applyScroll — no getScreenCoords here
+  if (!pts.length) return;
+  netCtx.clearRect(0, 0, netCanvas2d.width, netCanvas2d.height);
+
+  NET_CONNS.forEach(([ai, bi], ci) => {
+    const a = pts[ai], b = pts[bi];
+    if (!a || !b) return;
+    const cfg = NET_TYPES[NET_DEFS[ai].t];
+    const tr = NET_TRACERS[ci];
+    tr.p = (tr.p + tr.spd) % 1;
+
+    // Connection line — clean, semi-opaque, slight glow
+    netCtx.save();
+    netCtx.shadowColor = cfg.color;
+    netCtx.shadowBlur = 4;
+    netCtx.beginPath();
+    netCtx.moveTo(a.x, a.y); netCtx.lineTo(b.x, b.y);
+    netCtx.strokeStyle = cfg.color + '66'; netCtx.lineWidth = 1.4; netCtx.stroke();
+    netCtx.restore();
+
+    // Tracer: shadowBlur replaces createRadialGradient (no object allocation per frame)
+    const tx = a.x + (b.x - a.x) * tr.p, ty = a.y + (b.y - a.y) * tr.p;
+    netCtx.save();
+    netCtx.shadowColor = cfg.color;
+    netCtx.shadowBlur = 10;
+    netCtx.beginPath(); netCtx.arc(tx, ty, 2.8, 0, Math.PI * 2);
+    netCtx.fillStyle = cfg.color; netCtx.fill();
+    netCtx.restore();
+  });
+}
+
+const PIN_DEFS = [
+  { label:'Jordan',    dir:'right', delay:0.26, accent:'#FFFFFF', coords:'31.9°N · 35.9°E', lat:31.95, lng:35.93 },
+  { label:'Palestine', dir:'left',  delay:0.1,  accent:'#FFFFFF', coords:'31.9°N · 35.2°E', lat:31.9,  lng:35.2  }
+];
+
+function mountPins() {
+  if (!pinsOverlay) return null;
+  pinsOverlay.innerHTML = ''; // clear to restart CSS animations
+  return PIN_DEFS.map(def => {
+    const el = document.createElement('div');
+    el.style.cssText = 'position:absolute;top:0;left:0;width:0;height:0;will-change:transform,opacity;pointer-events:none';
+    el.innerHTML = pinHTML(def.label, def.dir, def.delay, def.accent, def.coords);
+    pinsOverlay.appendChild(el);
+    return el;
+  });
+}
+
+// MENA country IDs (ISO 3166-1 numeric)
+const MENA_IDS = new Set(['012','048','174','262','818','368','400','414','422','434','478','504','512','275','634','682','706','729','760','788','784','887']);
+function isMENA(d) { return d && MENA_IDS.has(d.id); }
+function isHighlight(d) { return d && (d.id === '400' || d.id === '275'); }
+
+// Container origin (0,0) = country surface point projected onto globe.
+// Card floats up-and-outward; arc curves from origin to card's inner edge.
+function pinHTML(label, dir, delay, accent, coords) {
+  const R = dir === 'right';
+  const CW = 158, CH = 66;
+
+  // Card position in container space
+  const cardL = R ? 58 : -(CW + 58);   // left edge of card
+  const cardT = -118;                    // top edge of card
+  const cardCY = cardT + CH / 2;        // vertical mid = -85
+
+  // Arc endpoint: the edge of the card facing the country
+  const arcEndX = R ? cardL : cardL + CW;   //  58 | -58
+  const arcEndY = cardCY;                    // -85
+
+  // Cubic bezier: gentle S-curve rising from country toward card
+  const cp1x = R ?  5 : -5;
+  const cp1y = -30;
+  const cp2x = R ? arcEndX - 22 : arcEndX + 22;
+  const cp2y = arcEndY + 28;
+  const arcD = `M 0 0 C ${cp1x} ${cp1y} ${cp2x} ${cp2y} ${arcEndX} ${arcEndY}`;
+
+  // Unique IDs per pin so gradients/filters don't collide
+  const uid = label.slice(0, 2).toLowerCase();
+
+  const svg = `
+<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"
+     style="position:absolute;left:0;top:0;overflow:visible;pointer-events:none">
+  <defs>
+    <linearGradient id="g_${uid}" gradientUnits="userSpaceOnUse"
+        x1="0" y1="0" x2="${arcEndX}" y2="${arcEndY}">
+      <stop offset="0%"   stop-color="${accent}" stop-opacity="0.08"/>
+      <stop offset="60%"  stop-color="${accent}" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="${accent}" stop-opacity="0.92"/>
+    </linearGradient>
+    <filter id="f_${uid}" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="2.8" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Expanding pulse rings at country point -->
+  <circle cx="0" cy="0" r="4" fill="${accent}" fill-opacity="0">
+    <animate attributeName="r"            values="4;22"   dur="2.2s" repeatCount="indefinite" begin="${delay}s"/>
+    <animate attributeName="fill-opacity" values="0.4;0"  dur="2.2s" repeatCount="indefinite" begin="${delay}s"/>
+  </circle>
+  <circle cx="0" cy="0" r="4" fill="${accent}" fill-opacity="0">
+    <animate attributeName="r"            values="4;22"   dur="2.2s" repeatCount="indefinite" begin="${delay + 0.75}s"/>
+    <animate attributeName="fill-opacity" values="0.3;0"  dur="2.2s" repeatCount="indefinite" begin="${delay + 0.75}s"/>
+  </circle>
+
+  <!-- Core dot -->
+  <circle cx="0" cy="0" r="4"   fill="${accent}" filter="url(#f_${uid})" opacity="0.5"/>
+  <circle cx="0" cy="0" r="2.2" fill="${accent}"/>
+
+  <!-- Soft glow halo behind arc (static, no dashoffset) -->
+  <path d="${arcD}" fill="none" stroke="${accent}" stroke-width="5"
+        stroke-opacity="0.07" stroke-linecap="round"/>
+
+  <!-- Arc — draws in on mount via stroke-dashoffset -->
+  <path d="${arcD}" fill="none" stroke="url(#g_${uid})" stroke-width="1.4"
+        stroke-linecap="round"
+        stroke-dasharray="300" stroke-dashoffset="300"
+        style="animation:pinDraw 1s cubic-bezier(.4,0,.2,1) ${delay + 0.2}s forwards"/>
+
+  <!-- Tracer dot that rides the arc on repeat -->
+  <circle r="2.8" fill="${accent}" filter="url(#f_${uid})" opacity="0">
+    <animateMotion path="${arcD}" dur="2.8s" repeatCount="indefinite" begin="${delay + 1.3}s"/>
+    <animate attributeName="opacity"
+             values="0;1;1;0" keyTimes="0;0.07;0.9;1"
+             dur="2.8s" repeatCount="indefinite" begin="${delay + 1.3}s"/>
+  </circle>
+</svg>`;
+
+  // Glassmorphism label card — all positioning relative to container origin
+  const card = `
+<div style="
+  position:absolute;left:${cardL}px;top:${cardT}px;
+  width:${CW}px;height:${CH}px;
+  background:rgba(6,20,30,0.72);
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  border:1px solid rgba(255,255,255,0.08);
+  border-top:1.5px solid ${accent};
+  border-radius:10px;
+  padding:11px 14px 10px;
+  box-shadow:0 16px 48px rgba(0,0,0,0.55),
+             0 0 0 1px ${accent}18,
+             inset 0 1px 0 rgba(255,255,255,0.05);
+  overflow:hidden;
+  pointer-events:none;
+  animation:pinCard 0.6s cubic-bezier(.2,.9,.25,1.1) ${delay}s both;
+">
+  <!-- Accent shimmer line just below top border -->
+  <div style="position:absolute;top:0;left:16px;right:40%;height:1px;
+              background:linear-gradient(90deg,${accent}cc,${accent}00)"></div>
+  <!-- Coordinates eyebrow -->
+  <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;
+              letter-spacing:0.18em;color:${accent};text-transform:uppercase;
+              opacity:0.75;margin-bottom:5px">${coords}</div>
+  <!-- Country name -->
+  <div style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:15px;
+              color:#EDE9E3;letter-spacing:-0.02em;line-height:1">${label}</div>
+  <!-- Live indicator -->
+  <div style="margin-top:8px;display:flex;align-items:center;gap:7px">
+    <div style="width:5px;height:5px;border-radius:50%;background:${accent};
+                box-shadow:0 0 8px ${accent};
+                animation:dotPulse 1.8s ease-in-out infinite alternate"></div>
+    <span style="font-family:'IBM Plex Mono',monospace;font-size:8.5px;
+                 color:rgba(255,255,255,0.25);letter-spacing:0.12em;
+                 text-transform:uppercase">Origin · MENA</span>
+  </div>
+</div>`;
+
+  return svg + card;
+}
+
+// PIN_DEFS drives both mountPins() and applyScroll() positioning (defined above globe init)
+
+async function initGlobe() {
+  const el = document.getElementById('reachly-globe');
+  if (!el) return;
+
+  try {
+    const r = await fetch('https://unpkg.com/world-atlas@2/countries-110m.json');
+    const topo = await r.json();
+    countries = topojson.feature(topo, topo.objects.countries).features;
+  } catch(e) { countries = []; }
+
+  world = Globe()(el)
+    .backgroundColor('rgba(0,0,0,0)')
+    /* ── Solid filled polygons (not dots) ── */
+    .polygonsData(countries)
+    .polygonCapColor(d => {
+      if (!d) return 'rgba(22,70,85,0.7)';
+      if (isHighlight(d)) return 'rgba(255,248,160,0.88)';  // Jordan & Palestine — bright glow
+      if (isMENA(d))      return 'rgba(242,220,90,0.44)';   // Rest of MENA — warm amber-yellow
+      return 'rgba(22,70,85,0.7)';
+    })
+    .polygonSideColor(d => {
+      if (!d) return 'rgba(6,26,36,0.5)';
+      if (isHighlight(d)) return 'rgba(255,240,120,0.35)';
+      if (isMENA(d))      return 'rgba(242,210,80,0.18)';
+      return 'rgba(6,26,36,0.5)';
+    })
+    .polygonStrokeColor(d => {
+      if (!d) return '#1a4a58';
+      if (isHighlight(d)) return 'rgba(255,252,180,0.9)';
+      if (isMENA(d))      return 'rgba(242,220,90,0.55)';
+      return '#1a4a58';
+    })
+    .polygonAltitude(d => isHighlight(d) ? 0.042 : isMENA(d) ? 0.018 : 0.008)
+    /* ── Atmosphere ── */
+    .showAtmosphere(true)
+    .atmosphereColor('#88BDA4')
+    .atmosphereAltitude(0.2)
+    /* ── Graticules ── */
+    .showGraticules(false)
+    /* HTML pins are driven by the DOM overlay, not globe.gl's HTML layer */
+
+  world.globeMaterial().color.set('#061c28');
+  world.globeMaterial().emissive.set('#04131c');
+  world.globeMaterial().shininess = 4;
+  world.enablePointerInteraction(false); // no hit-testing = no per-frame ray cast
+
+  // Initial size — resize is handled by the debounced listener in initScrollLogic
+  world.width(el.clientWidth); world.height(el.clientHeight);
+
+  const c = world.controls();
+  c.enableZoom = false; c.enablePan = false; c.enableRotate = false;
+  c.autoRotate = true; c.autoRotateSpeed = 0.55;
+  cachedControls = c; // cache now so initScrollLogic doesn't need to call controls() again
+
+  world.pointOfView({lat:14, lng:18, altitude:2.7}, 0);
+  initScrollLogic();
+  initCompareSlider();
+}
+
+function bootGlobe() {
+  if (typeof Globe === 'undefined' || typeof topojson === 'undefined') {
+    if (tries++ > 80) return;
+    return setTimeout(bootGlobe, 120);
+  }
+  initGlobe();
+}
+bootGlobe();
+
+/* ── Scroll logic ──────────────────────────────────────────────── */
+function ease(t){ return t<.5?2*t*t:1-Math.pow(-2*t+2,2)/2; }
+function lerp(a,b,t){ return a+(b-a)*t; }
+
+// All DOM references cached once — never queried inside the rAF loop
+let cachedHero = null;
+let cachedBeats = [];
+let cachedSb = null;
+let cachedControls = null;
+// Geometric values cached at mount and on resize — no layout reads per frame
+let heroTop = 0;
+let heroScrollLen = 0;
+let totalScrollLen = 0;
+
+// ── B2B canvas animation ─────────────────────────────────────────
+let b2bCanvas, b2bCtx, b2bW = 0, b2bH = 0, b2bVisible = false;
+const B2B_TRAVEL = 2000; // ms per envelope journey
+const B2B_PAUSE  = 1000; // ms glow at destination
+const B2B_CYCLE  = B2B_TRAVEL + B2B_PAUSE;
+const B2B_STAGGER= 900;  // ms between each envelope's start offset
+const B2B_TARGETS_DEF = [
+  { name:'TechCorp',  sub:'Enterprise' },
+  { name:'StartupX',  sub:'Series A'   },
+  { name:'MENA Co.',  sub:'SMB'        },
+];
+
+function b2bBezierAt(p0x,p0y,p1x,p1y,p2x,p2y,p3x,p3y,t){
+  const u=1-t;
+  return {
+    x:u*u*u*p0x+3*u*u*t*p1x+3*u*t*t*p2x+t*t*t*p3x,
+    y:u*u*u*p0y+3*u*u*t*p1y+3*u*t*t*p2y+t*t*t*p3y
+  };
+}
+
+function drawB2BCompany(ctx,x,y,name,sub,glow,isSource){
+  const w=112,h=50,r=10;
+  ctx.save();
+  if(glow>0){ ctx.shadowColor='#2196F3'; ctx.shadowBlur=22*glow; }
+  ctx.fillStyle = isSource ? '#0c2040' : '#0a1826';
+  ctx.strokeStyle = isSource ? 'rgba(33,150,243,0.75)' : `rgba(33,150,243,${0.22+glow*0.7})`;
+  ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.roundRect(x-w/2,y-h/2,w,h,r); ctx.fill(); ctx.stroke();
+  ctx.restore();
+  // Building icon
+  ctx.save();
+  ctx.fillStyle = isSource ? '#2196F3' : `rgba(33,150,243,${0.55+glow*0.45})`;
+  const bx=x-w/2+11, by=y-9;
+  ctx.fillRect(bx,by,13,17);
+  ctx.fillStyle = isSource ? '#0c2040' : '#0a1826';
+  ctx.fillRect(bx+2,by+2,3,3); ctx.fillRect(bx+7,by+2,3,3);
+  ctx.fillRect(bx+2,by+8,3,3); ctx.fillRect(bx+7,by+8,3,3);
+  ctx.restore();
+  // Labels
+  ctx.save();
+  ctx.textBaseline='middle'; ctx.textAlign='left';
+  ctx.fillStyle='#ffffff'; ctx.font=`700 11.5px 'Space Grotesk',sans-serif`;
+  ctx.fillText(name, x-w/2+30, y-5);
+  ctx.fillStyle='rgba(255,255,255,0.35)'; ctx.font=`400 9.5px 'IBM Plex Mono',monospace`;
+  ctx.fillText(sub, x-w/2+30, y+8);
+  ctx.restore();
+}
+
+function drawB2BEnvelope(ctx,x,y){
+  const w=17,h=12;
+  ctx.save();
+  ctx.shadowColor='rgba(255,255,255,0.9)'; ctx.shadowBlur=10;
+  ctx.fillStyle='#ffffff';
+  ctx.beginPath(); ctx.roundRect(x-w/2,y-h/2,w,h,2.5); ctx.fill();
+  ctx.fillStyle='#dbeafe';
+  ctx.beginPath(); ctx.moveTo(x-w/2,y-h/2); ctx.lineTo(x,y+1.5); ctx.lineTo(x+w/2,y-h/2); ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+
+function drawB2BFrame(now){
+  if(!b2bCtx||!b2bW) return;
+  const ctx=b2bCtx, W=b2bW, H=b2bH;
+  ctx.clearRect(0,0,W,H);
+
+  const srcX=W*0.18, srcY=H*0.5;
+  const tgtX=W*0.80;
+  const tgtYs=[H*0.22, H*0.5, H*0.78];
+
+  tgtYs.forEach((tgtY,i)=>{
+    const elapsed=(now - i*B2B_STAGGER + 99999*B2B_CYCLE) % B2B_CYCLE;
+    const traveling = elapsed < B2B_TRAVEL;
+    const tFrac = traveling ? ease(elapsed/B2B_TRAVEL) : 1;
+    const pauseFrac = traveling ? 0 : (elapsed-B2B_TRAVEL)/B2B_PAUSE;
+    const glow = traveling ? 0 : Math.max(0, 1 - pauseFrac*1.6);
+
+    const cp1x=srcX+(tgtX-srcX)*0.42, cp2x=srcX+(tgtX-srcX)*0.58;
+    const lx0=srcX+56, lx1=tgtX-56;
+
+    // Dashed path
+    ctx.save();
+    ctx.strokeStyle='rgba(33,150,243,0.13)'; ctx.lineWidth=1.5; ctx.setLineDash([4,7]);
+    ctx.beginPath(); ctx.moveTo(lx0,srcY); ctx.bezierCurveTo(cp1x,srcY,cp2x,tgtY,lx1,tgtY);
+    ctx.stroke(); ctx.setLineDash([]); ctx.restore();
+
+    // Traveling envelope
+    if(traveling){
+      const pt=b2bBezierAt(lx0,srcY,cp1x,srcY,cp2x,tgtY,lx1,tgtY,tFrac);
+      drawB2BEnvelope(ctx,pt.x,pt.y);
+    }
+
+    // Target company
+    drawB2BCompany(ctx,tgtX,tgtY,B2B_TARGETS_DEF[i].name,B2B_TARGETS_DEF[i].sub,glow,false);
+  });
+
+  // Source company (drawn last = on top)
+  drawB2BCompany(ctx,srcX,srcY,'Your Co.','Founder',0,true);
+
+}
+
+const _DPR = Math.min(window.devicePixelRatio || 1, 2);
+
+function _resizeCanvas(canvas, wRef, hRef) {
+  const w = canvas.offsetWidth, h = canvas.offsetHeight;
+  canvas.width = Math.round(w * _DPR); canvas.height = Math.round(h * _DPR);
+  canvas.getContext('2d').setTransform(_DPR, 0, 0, _DPR, 0, 0);
+  return [w, h];
+}
+
+function initB2BCanvas(){
+  b2bCanvas=document.getElementById('b2b-canvas');
+  if(!b2bCanvas) return;
+  b2bCtx=b2bCanvas.getContext('2d');
+  [b2bW,b2bH]=_resizeCanvas(b2bCanvas);
+  const io=new IntersectionObserver(ens=>{ b2bVisible=ens[0].isIntersecting; },{threshold:0.1});
+  io.observe(b2bCanvas);
+  let _b2bRTO; window.addEventListener('resize',()=>{
+    clearTimeout(_b2bRTO); _b2bRTO=setTimeout(()=>{
+      if(!b2bCanvas) return;
+      [b2bW,b2bH]=_resizeCanvas(b2bCanvas);
+    },150);
+  },{passive:true});
+}
+
+// ── B2C canvas animation ─────────────────────────────────────────
+let b2cCanvas, b2cCtx, b2cW = 0, b2cH = 0, b2cVisible = false;
+const B2C_TRAVEL = 1700, B2C_PAUSE = 900, B2C_CYCLE = B2C_TRAVEL + B2C_PAUSE, B2C_STAGGER = 750;
+const B2C_RT_TRAVEL = 1100, B2C_RT_PAUSE = 700, B2C_RT_CYCLE = B2C_RT_TRAVEL + B2C_RT_PAUSE, B2C_RT_STAGGER = 480;
+
+const B2C_PLAT = [
+  { name:'Facebook',  sub:'Social',    color:'#1877F2', bg:'#0b1d3a' },
+  { name:'Instagram', sub:'Reels',     color:'#E1306C', bg:'#28091a' },
+  { name:'Reddit',    sub:'Community', color:'#FF4500', bg:'#2a1000' },
+];
+const B2C_PEOPLE = [
+  { init:'A', name:'Ahmad K.', color:'#88BDA4' },
+  { init:'S', name:'Sara M.',  color:'#D8589B' },
+  { init:'O', name:'Omar R.',  color:'#9484EC' },
+];
+
+function drawB2CPlatform(ctx, x, y, plat, glow) {
+  const w=108, h=48, r=10;
+  ctx.save();
+  if(glow>0){ ctx.shadowColor=plat.color; ctx.shadowBlur=20*glow; }
+  ctx.fillStyle=plat.bg;
+  ctx.strokeStyle=glow>0 ? plat.color : `${plat.color}44`;
+  ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.roundRect(x-w/2, y-h/2, w, h, r); ctx.fill(); ctx.stroke();
+  ctx.restore();
+  // Platform letter badge
+  ctx.save();
+  ctx.fillStyle=plat.color;
+  ctx.font=`800 13px 'Space Grotesk',sans-serif`;
+  ctx.textBaseline='middle'; ctx.textAlign='center';
+  const bx=x-w/2+22;
+  ctx.beginPath(); ctx.arc(bx, y, 11, 0, Math.PI*2); ctx.fillStyle=plat.color+'33'; ctx.fill();
+  ctx.fillStyle=plat.color; ctx.fillText(plat.name[0], bx, y);
+  ctx.restore();
+  ctx.save();
+  ctx.fillStyle='#fff'; ctx.font=`700 11px 'Space Grotesk',sans-serif`;
+  ctx.textBaseline='middle'; ctx.textAlign='left';
+  ctx.fillText(plat.name, x-w/2+39, y-5);
+  ctx.fillStyle='rgba(255,255,255,0.32)'; ctx.font=`400 9px 'IBM Plex Mono',monospace`;
+  ctx.fillText(plat.sub, x-w/2+39, y+8);
+  ctx.restore();
+}
+
+function drawB2CPerson(ctx, x, y, p, glow) {
+  const r=20;
+  ctx.save();
+  if(glow>0){ ctx.shadowColor=p.color; ctx.shadowBlur=18*glow; }
+  ctx.fillStyle=p.color+'28';
+  ctx.strokeStyle=glow>0 ? p.color : p.color+'55';
+  ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill(); ctx.stroke();
+  ctx.restore();
+  // Head silhouette
+  ctx.save();
+  ctx.fillStyle=p.color;
+  ctx.beginPath(); ctx.arc(x, y-5, 7, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x, y+18, 13, Math.PI, 0); ctx.fill();
+  ctx.restore();
+  // Name below
+  ctx.save();
+  ctx.fillStyle='rgba(255,255,255,0.45)';
+  ctx.font=`500 8.5px 'IBM Plex Mono',monospace`;
+  ctx.textAlign='center'; ctx.textBaseline='top';
+  ctx.fillText(p.name, x, y+r+5);
+  ctx.restore();
+}
+
+function drawB2CDot(ctx, x, y, color) {
+  ctx.save();
+  ctx.shadowColor=color; ctx.shadowBlur=10;
+  ctx.fillStyle=color;
+  ctx.beginPath(); ctx.arc(x,y,5,0,Math.PI*2); ctx.fill();
+  ctx.restore();
+}
+
+function drawB2CFrame(now) {
+  if(!b2cCtx||!b2cW) return;
+  const ctx=b2cCtx, W=b2cW, H=b2cH;
+  ctx.clearRect(0,0,W,H);
+
+  const srcX=W*0.14, srcY=H*0.5;
+  const platX=W*0.47;
+  const pplX=W*0.84;
+  const platYs=[H*0.22, H*0.50, H*0.78];
+  // 6 clients evenly distributed — no overlap between platforms
+  const clientYs=[H*0.09, H*0.26, H*0.43, H*0.57, H*0.74, H*0.91];
+
+  // ── Stage 2 (drawn first, behind platforms): Platform → Clients ──
+  platYs.forEach((tY,i)=>{
+    const platColor=B2C_PLAT[i].color;
+    const cx0=platX+54, cx1=pplX-20;
+    [0,1].forEach(j=>{
+      const globalJ=i*2+j;
+      const cY=clientYs[globalJ];
+      const cElapsed=(now - globalJ*B2C_RT_STAGGER + 99999*B2C_RT_CYCLE) % B2C_RT_CYCLE;
+      const cTraveling=cElapsed<B2C_RT_TRAVEL;
+      const cFrac=cTraveling ? ease(cElapsed/B2C_RT_TRAVEL) : 1;
+      const cGlow=cTraveling ? 0 : Math.max(0, 1-((cElapsed-B2C_RT_TRAVEL)/B2C_RT_PAUSE)*2);
+      const ccp1x=platX+(pplX-platX)*0.35, ccp2x=platX+(pplX-platX)*0.65;
+
+      ctx.save();
+      ctx.strokeStyle=platColor+'1a'; ctx.lineWidth=1.2; ctx.setLineDash([2,5]);
+      ctx.beginPath(); ctx.moveTo(cx0,tY); ctx.bezierCurveTo(ccp1x,tY,ccp2x,cY,cx1,cY);
+      ctx.stroke(); ctx.setLineDash([]); ctx.restore();
+
+      if(cTraveling){
+        const pt=b2bBezierAt(cx0,tY,ccp1x,tY,ccp2x,cY,cx1,cY,cFrac);
+        drawB2CDot(ctx,pt.x,pt.y,platColor);
+      }
+      drawB2CPerson(ctx,pplX,cY,B2C_PEOPLE[globalJ%B2C_PEOPLE.length],cGlow);
+    });
+  });
+
+  // ── Stage 1: Company → Platforms (drawn on top) ─────────────────
+  platYs.forEach((tY,i)=>{
+    const elapsed=(now - i*B2C_STAGGER + 99999*B2C_CYCLE) % B2C_CYCLE;
+    const traveling=elapsed<B2C_TRAVEL;
+    const tFrac=traveling ? ease(elapsed/B2C_TRAVEL) : 1;
+    const glow=traveling ? 0 : Math.max(0, 1-((elapsed-B2C_TRAVEL)/B2C_PAUSE)*1.8);
+    const platColor=B2C_PLAT[i].color;
+    const lx0=srcX+52, lx1=platX-54;
+    const cp1x=srcX+(platX-srcX)*0.42, cp2x=srcX+(platX-srcX)*0.58;
+
+    ctx.save();
+    ctx.strokeStyle=platColor+'22'; ctx.lineWidth=1.5; ctx.setLineDash([3,6]);
+    ctx.beginPath(); ctx.moveTo(lx0,srcY); ctx.bezierCurveTo(cp1x,srcY,cp2x,tY,lx1,tY);
+    ctx.stroke(); ctx.setLineDash([]); ctx.restore();
+
+    if(traveling){
+      const pt=b2bBezierAt(lx0,srcY,cp1x,srcY,cp2x,tY,lx1,tY,tFrac);
+      drawB2CDot(ctx,pt.x,pt.y,platColor);
+    }
+    drawB2CPlatform(ctx,platX,tY,B2C_PLAT[i],glow);
+  });
+
+  // Source company always on top
+  drawB2BCompany(ctx,srcX,srcY,'Your Co.','Founder',0,true);
+}
+
+function initB2CCanvas(){
+  b2cCanvas=document.getElementById('b2c-canvas');
+  if(!b2cCanvas) return;
+  b2cCtx=b2cCanvas.getContext('2d');
+  [b2cW,b2cH]=_resizeCanvas(b2cCanvas);
+  const io=new IntersectionObserver(ens=>{ b2cVisible=ens[0].isIntersecting; },{threshold:0.1});
+  io.observe(b2cCanvas);
+  let _b2cRTO; window.addEventListener('resize',()=>{
+    clearTimeout(_b2cRTO); _b2cRTO=setTimeout(()=>{
+      if(!b2cCanvas) return;
+      [b2cW,b2cH]=_resizeCanvas(b2cCanvas);
+    },150);
+  },{passive:true});
+}
+
+// ── Audience cards scroll state ──────────────────────────────────
+let audSection = null, audCards = [], audSecTop = 0, audScrollLen = 1;
+
+function initAudCards() {
+  audSection = document.getElementById('audiences');
+  if (!audSection) return;
+  audCards    = [...audSection.querySelectorAll('.aud-card-scroll')];
+  audSecTop   = audSection.offsetTop;
+  audScrollLen = Math.max(1, audSection.offsetHeight - window.innerHeight);
+}
+
+// ── Gap section state ────────────────────────────────────────────
+let gapCanvas, gapCtx, gapW = 0, gapH = 0;
+let gapTop = 0, gapScrollLen = 1;
+let gapBeats = [];
+let gapVisible = false, gapDirty = false;
+let lastGapP = -1;
+let GAP_EXEC_PTS = [], GAP_DIST_PTS = [];
+let cachedGapGrad = null;
+const GAP_STEPS = 240;
+
+function gapSampleBezier(p0x,p0y,p1x,p1y,p2x,p2y,p3x,p3y,n){
+  const pts=[];
+  for(let i=0;i<=n;i++){
+    const t=i/n,u=1-t;
+    pts.push({
+      x:u*u*u*p0x+3*u*u*t*p1x+3*u*t*t*p2x+t*t*t*p3x,
+      y:u*u*u*p0y+3*u*u*t*p1y+3*u*t*t*p2y+t*t*t*p3y
+    });
+  }
+  return pts;
+}
+
+function precomputeGapPaths(){
+  if(!gapW||!gapH) return;
+  cachedGapGrad=null;
+  const pad=Math.max(72,gapW*0.09);
+  const L=pad, R=gapW-pad;
+  const cW=R-L;
+  // Execution: rises from mid-low to near-top (left to right)
+  GAP_EXEC_PTS=gapSampleBezier(L,gapH*0.68, L+cW*0.28,gapH*0.60, L+cW*0.62,gapH*0.22, R,gapH*0.09, GAP_STEPS);
+  // Distribution: falls from near-top to near-bottom
+  GAP_DIST_PTS=gapSampleBezier(L,gapH*0.30, L+cW*0.30,gapH*0.28, L+cW*0.64,gapH*0.72, R,gapH*0.82, GAP_STEPS);
+}
+
+function clamp01(v){return v<0?0:v>1?1:v;}
+
+function drawGapCanvas(gapP){
+  if(!gapCtx||!gapW||!GAP_EXEC_PTS.length) return;
+  const ctx=gapCtx, W=gapW, H=gapH;
+
+  // Animation parameters (scroll-driven, no per-frame alloc in hot path)
+  const execT   = ease(clamp01(gapP/0.28));
+  const distT   = ease(clamp01((gapP-0.14)/0.28));
+  const gapAlpha= ease(clamp01((gapP-0.44)/0.22));
+  const bridgeT = ease(clamp01((gapP-0.74)/0.22));
+
+  const execN  = Math.min(Math.floor(execT*(GAP_STEPS+1)),  GAP_STEPS);
+  const distN  = Math.min(Math.floor(distT*(GAP_STEPS+1)),  GAP_STEPS);
+  const bridgeN= Math.min(Math.floor(bridgeT*(GAP_STEPS+1)),GAP_STEPS);
+
+  // Background
+  ctx.fillStyle='#07101e';
+  ctx.fillRect(0,0,W,H);
+
+  // Faint vertical grid lines
+  ctx.save();
+  ctx.strokeStyle='rgba(255,255,255,0.035)';
+  ctx.lineWidth=1;
+  const pad=Math.max(72,W*0.09);
+  for(let i=1;i<5;i++){
+    const x=pad+(W-2*pad)*(i/5);
+    ctx.beginPath();ctx.moveTo(x,H*0.07);ctx.lineTo(x,H*0.93);ctx.stroke();
+  }
+  ctx.restore();
+
+  // X-axis baseline
+  ctx.save();
+  ctx.strokeStyle='rgba(255,255,255,0.07)';
+  ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(pad,H*0.90);ctx.lineTo(W-pad,H*0.90);ctx.stroke();
+  // Year labels
+  ctx.fillStyle='rgba(255,255,255,0.28)';
+  ctx.font=`500 ${Math.max(10,W*0.0095)}px 'IBM Plex Mono',monospace`;
+  ctx.textAlign='center';
+  ['2015','2018','2021','2024','NOW'].forEach((yr,i)=>{
+    const x=pad+(W-2*pad)*(i/4);
+    ctx.fillText(yr,x,H*0.935);
+  });
+  ctx.restore();
+
+  // ── Gap fill (cached gradient, no per-frame allocation) ──────
+  if(gapAlpha>0){
+    if(!cachedGapGrad){
+      cachedGapGrad=ctx.createLinearGradient(0,0,0,H);
+      cachedGapGrad.addColorStop(0,'rgba(224,90,58,0.0)');
+      cachedGapGrad.addColorStop(0.30,'rgba(224,90,58,0.42)');
+      cachedGapGrad.addColorStop(0.65,'rgba(224,90,58,0.32)');
+      cachedGapGrad.addColorStop(1,'rgba(224,90,58,0.0)');
+    }
+    ctx.save();
+    ctx.globalAlpha=gapAlpha*0.6;
+    ctx.beginPath();
+    ctx.moveTo(GAP_EXEC_PTS[0].x,GAP_EXEC_PTS[0].y);
+    for(let i=1;i<GAP_EXEC_PTS.length;i++) ctx.lineTo(GAP_EXEC_PTS[i].x,GAP_EXEC_PTS[i].y);
+    for(let i=GAP_DIST_PTS.length-1;i>=0;i--) ctx.lineTo(GAP_DIST_PTS[i].x,GAP_DIST_PTS[i].y);
+    ctx.closePath();
+    ctx.fillStyle=cachedGapGrad;
+    ctx.fill();
+    ctx.restore();
+
+  }
+
+  // ── Execution line ────────────────────────────────────────────
+  if(execN>0){
+    ctx.save();
+    ctx.shadowColor='#2196F3';
+    ctx.shadowBlur=14;
+    ctx.beginPath();
+    ctx.moveTo(GAP_EXEC_PTS[0].x,GAP_EXEC_PTS[0].y);
+    for(let i=1;i<=execN;i++) ctx.lineTo(GAP_EXEC_PTS[i].x,GAP_EXEC_PTS[i].y);
+    ctx.strokeStyle='#2196F3';
+    ctx.lineWidth=2.6;
+    ctx.lineJoin='round';
+    ctx.stroke();
+    ctx.restore();
+    // Label
+    if(execT>0.86){
+      const ep=GAP_EXEC_PTS[execN]||GAP_EXEC_PTS[GAP_EXEC_PTS.length-1];
+      ctx.save();
+      ctx.globalAlpha=(execT-0.86)/0.14;
+      ctx.fillStyle='#2196F3';
+      ctx.font=`700 ${Math.max(10,W*0.0105)}px 'Space Grotesk',sans-serif`;
+      ctx.textAlign='right';
+      ctx.fillText('▲  EXECUTION',ep.x-6,ep.y-12);
+      ctx.restore();
+    }
+  }
+
+  // ── Distribution line ─────────────────────────────────────────
+  if(distN>0){
+    ctx.save();
+    ctx.shadowColor='#E05A3A';
+    ctx.shadowBlur=14;
+    ctx.beginPath();
+    ctx.moveTo(GAP_DIST_PTS[0].x,GAP_DIST_PTS[0].y);
+    for(let i=1;i<=distN;i++) ctx.lineTo(GAP_DIST_PTS[i].x,GAP_DIST_PTS[i].y);
+    ctx.strokeStyle='#E05A3A';
+    ctx.lineWidth=2.6;
+    ctx.lineJoin='round';
+    ctx.stroke();
+    ctx.restore();
+    // Label
+    if(distT>0.86){
+      const dp=GAP_DIST_PTS[distN]||GAP_DIST_PTS[GAP_DIST_PTS.length-1];
+      ctx.save();
+      ctx.globalAlpha=(distT-0.86)/0.14;
+      ctx.fillStyle='#E05A3A';
+      ctx.font=`700 ${Math.max(10,W*0.0105)}px 'Space Grotesk',sans-serif`;
+      ctx.textAlign='right';
+      ctx.fillText('▼  DISTRIBUTION',dp.x-6,dp.y+18);
+      ctx.restore();
+    }
+  }
+
+  // ── Bridge line (Reachly closes the gap) ─────────────────────
+  if(bridgeN>0&&GAP_EXEC_PTS.length&&GAP_DIST_PTS.length){
+    const ep=GAP_EXEC_PTS[GAP_EXEC_PTS.length-1];
+    const dp=GAP_DIST_PTS[GAP_DIST_PTS.length-1];
+    const bx=dp.x+(ep.x-dp.x)*(bridgeN/GAP_STEPS);
+    const by=dp.y+(ep.y-dp.y)*(bridgeN/GAP_STEPS);
+    ctx.save();
+    ctx.shadowColor='rgba(33,150,243,0.8)';
+    ctx.shadowBlur=18;
+    ctx.setLineDash([10,5]);
+    ctx.lineDashOffset=0;
+    ctx.beginPath();
+    ctx.moveTo(dp.x,dp.y);
+    ctx.lineTo(bx,by);
+    ctx.strokeStyle='rgba(255,255,255,0.85)';
+    ctx.lineWidth=2.2;
+    ctx.stroke();
+    ctx.restore();
+    // Reachly label on bridge midpoint
+    if(bridgeT>0.44){
+      const a=(bridgeT-0.44)/0.56;
+      const mx=dp.x+(bx-dp.x)*0.5, my=dp.y+(by-dp.y)*0.5-16;
+      ctx.save();
+      ctx.globalAlpha=a;
+      ctx.fillStyle='#fff';
+      ctx.font=`800 ${Math.max(11,W*0.012)}px 'Space Grotesk',sans-serif`;
+      ctx.letterSpacing='0.1em';
+      ctx.textAlign='center';
+      ctx.shadowColor='#2196F3';
+      ctx.shadowBlur=14;
+      ctx.fillText('REACHLY',mx,my);
+      ctx.restore();
+    }
+  }
+}
+
+function initGapCanvas(){
+  gapCanvas=document.getElementById('gap-canvas');
+  if(!gapCanvas) return;
+  gapCtx=gapCanvas.getContext('2d');
+  const sec=document.getElementById('gap-section');
+  if(sec){
+    gapTop=sec.offsetTop;
+    gapScrollLen=Math.max(1,sec.offsetHeight-window.innerHeight);
+    gapBeats=[...sec.querySelectorAll('[data-gap-beat]')];
+  }
+  gapW=window.innerWidth; gapH=window.innerHeight;
+  gapCanvas.width=Math.round(gapW*_DPR); gapCanvas.height=Math.round(gapH*_DPR);
+  gapCanvas.style.width=gapW+'px'; gapCanvas.style.height=gapH+'px';
+  gapCtx.setTransform(_DPR,0,0,_DPR,0,0);
+  precomputeGapPaths();
+}
+
+// Dirty flag: scroll event only sets a cheap variable, never schedules work
+let scrollDirty = false;
+let lastScrollY = 0;
+// Delta-guard: skip pointOfView when camera hasn't meaningfully changed
+let lastPOVLat = null, lastPOVLng = null, lastPOVAlt = null;
+// Letter-draw animation state
+let reachlyLettersIn = false;
+const rlEls = () => document.querySelectorAll('.rl');
+
+function cacheLayout() {
+  // All offsetTop/offsetHeight reads batched here, called once at mount and on resize
+  if (!cachedHero) return;
+  heroTop = cachedHero.offsetTop;
+  heroScrollLen = Math.max(1, cachedHero.offsetHeight - window.innerHeight);
+  totalScrollLen = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
+}
+
+function applyScroll() {
+  const sy = lastScrollY;
+  if (cachedSb) cachedSb.style.transform = `scaleX(${sy / totalScrollLen})`;
+  const p = Math.min(1, Math.max(0, (sy - heroTop) / heroScrollLen));
+
+  // ── Globe camera: 3 phases ───────────────────────────────────────
+  if (world) {
+    if (p < 0.18) {
+      if (cachedControls) cachedControls.autoRotate = true;
+    } else {
+      if (cachedControls) cachedControls.autoRotate = false;
+
+      let newLat, newLng, newAlt;
+      if (p <= 0.55) {
+        // Phase 1: global view → Jordan close-up (MENA glow visible)
+        const t = (p - 0.18) / (0.55 - 0.18);
+        const move = ease(Math.min(1, t));
+        newLat = lerp(14, 31.6, move);
+        newLng = lerp(18, 35.4, move);
+        newAlt = lerp(2.7, 0.62, ease(t));
+      } else {
+        // Phase 2: deep zoom into Jordan & Palestine
+        const t2 = Math.min(1, (p - 0.55) / (0.80 - 0.55));
+        newLat = lerp(31.6, 31.55, ease(t2));
+        newLng = lerp(35.4, 35.90, ease(t2));
+        newAlt = lerp(0.62, 0.045, ease(t2));
+      }
+      if (Math.abs(newLat - lastPOVLat) > 0.006 || Math.abs(newLng - lastPOVLng) > 0.006 || Math.abs(newAlt - lastPOVAlt) > 0.0006) {
+        world.pointOfView({ lat: newLat, lng: newLng, altitude: newAlt }, 0);
+        lastPOVLat = newLat; lastPOVLng = newLng; lastPOVAlt = newAlt;
+      }
+    }
+  }
+
+  // ── Glassmorphism pin cards (MENA phase only) ────────────────────
+  const pinsOn = p > 0.36 && p < 0.58;
+  if (pinsOn && !pinsVisible) {
+    cachedPinEls = mountPins(); pinsVisible = true;
+  } else if (!pinsOn && pinsVisible) {
+    pinsVisible = false;
+    if (pinsOverlay) pinsOverlay.innerHTML = '';
+    cachedPinEls = null;
+  }
+  if (pinsVisible && cachedPinEls && world) {
+    const fadeIn  = Math.min(1, (p - 0.36) / 0.04);
+    const fadeOut = Math.min(1, (0.58 - p) / 0.04);
+    PIN_DEFS.forEach((def, i) => {
+      const pos = world.getScreenCoords(def.lat, def.lng, 0.04);
+      if (!pos || !cachedPinEls[i]) return;
+      cachedPinEls[i].style.transform = `translate3d(${pos.x.toFixed(1)}px,${pos.y.toFixed(1)}px,0)`;
+      cachedPinEls[i].style.opacity = fadeIn * fadeOut;
+    });
+  }
+
+  // ── Network node overlay (deep zoom phase) ───────────────────────
+  const netOn = p > 0.68;
+  if (netOn && !netVisible) {
+    netEls = mountNetOverlay(); netVisible = true;
+    if (netCanvas2d) netCanvas2d.style.opacity = '1';
+  } else if (!netOn && netVisible) {
+    netVisible = false; netEls = null;
+    if (netOverlay) netOverlay.innerHTML = '';
+    if (netCanvas2d) {
+      netCanvas2d.style.opacity = '0';
+      if (netCtx) netCtx.clearRect(0, 0, netCanvas2d.width, netCanvas2d.height);
+    }
+  }
+  if (netVisible && netEls && world) {
+    const netAlpha = Math.min(1, (p - 0.68) / 0.07);
+    // Compute screen coords once per scroll event — reused by tracer rafLoop
+    cachedNetPts = NET_DEFS.map(d => world.getScreenCoords(d.lat, d.lng, 0.002));
+    netEls.forEach((el, i) => {
+      const pos = cachedNetPts[i];
+      if (!pos || !el) return;
+      el.style.transform = `translate3d(${pos.x.toFixed(1)}px,${pos.y.toFixed(1)}px,0)`;
+      el.style.opacity = netAlpha;
+    });
+  }
+
+  // ── Beat opacity ─────────────────────────────────────────────────
+  const nb = cachedBeats.length;
+  for (let i = 0; i < nb; i++) {
+    const center = (i + 0.5) / nb;
+    const dist = Math.abs(p - center);
+    cachedBeats[i].style.opacity = Math.max(0, 1 - dist / (0.55 / nb));
+  }
+
+  // ── Gap section scroll ────────────────────────────────────────
+  if(gapBeats.length){
+    const inView = sy > gapTop - gapH && sy < gapTop + gapScrollLen + gapH;
+    if(inView){
+      const gP=Math.min(1,Math.max(0,(sy-gapTop)/gapScrollLen));
+      const ngb=gapBeats.length;
+      for(let i=0;i<ngb;i++){
+        const center=(i+0.5)/ngb;
+        const dist=Math.abs(gP-center);
+        gapBeats[i].style.opacity=Math.max(0,1-dist/(0.55/ngb));
+      }
+      if(gP!==lastGapP){ lastGapP=gP; gapDirty=true; }
+      gapVisible=true;
+    } else {
+      if(gapVisible){ gapBeats.forEach(b=>b.style.opacity='0'); gapVisible=false; gapDirty=true; }
+    }
+  }
+
+  // ── Audience cards: scroll-driven lift via sticky section ────────
+  if (audCards.length) {
+    const audP = Math.min(1, Math.max(0, (sy - audSecTop) / audScrollLen));
+    // Three cards, each occupies ~1/3 of the scroll range with a gap between
+    audCards.forEach((card, i) => {
+      const start = i * 0.32;
+      const t = ease(clamp01((audP - start) / 0.22));
+      card.style.opacity   = t;
+      card.style.transform = `translateY(${(1 - t) * 48}px)`;
+    });
+  }
+
+  // ── Reachly letter-draw: trigger when beat 5 enters view ─────────
+  const beat5Op = cachedBeats[5] ? parseFloat(cachedBeats[5].style.opacity) : 0;
+  if (beat5Op > 0.05 && !reachlyLettersIn) {
+    reachlyLettersIn = true;
+    rlEls().forEach(el => el.classList.add('in'));
+  } else if (beat5Op < 0.02 && reachlyLettersIn) {
+    reachlyLettersIn = false;
+    rlEls().forEach(el => el.classList.remove('in'));
+  }
+}
+
+// Single persistent rAF loop — runs scroll logic + canvas tracer animation
+// Throttle canvas animations to 30fps — enough for smooth motion, halves GPU load
+let _lastCanvasFrame = 0;
+let _rafPaused = false;
+document.addEventListener('visibilitychange', () => {
+  _rafPaused = document.hidden;
+});
+
+function rafLoop(ts) {
+  if (_rafPaused) { requestAnimationFrame(rafLoop); return; }
+  if (scrollDirty) { scrollDirty = false; applyScroll(); }
+  const dt = ts - _lastCanvasFrame;
+  if (dt >= 33) { // ~30fps for canvas draws
+    _lastCanvasFrame = ts;
+    if (netVisible && world && netCtx) drawNetCanvas();
+    if (gapDirty) { gapDirty = false; drawGapCanvas(lastGapP); }
+    if (b2bVisible) drawB2BFrame(ts);
+    if (b2cVisible) drawB2CFrame(ts);
+  }
+  requestAnimationFrame(rafLoop);
+}
+
+function initCompareSlider() {
+  const wrap = document.getElementById('compare-slider');
+  if (!wrap) return;
+  const rightPanel = wrap.querySelector('.cs-panel-right');
+  const vline      = document.getElementById('cs-vline');
+  const knob       = document.getElementById('cs-knob');
+  let dragging = false, rafId = null;
+  let targetPct = 50, currentPct = 50;
+
+  function applyPct(p) {
+    const ps = p.toFixed(2);
+    knob.style.left  = ps + '%';
+    vline.style.left = ps + '%';
+    rightPanel.style.clipPath = `inset(0 0 0 ${ps}%)`;
+  }
+
+  function tick() {
+    currentPct += (targetPct - currentPct) * 0.16;
+    applyPct(currentPct);
+    if (dragging || Math.abs(targetPct - currentPct) > 0.05) {
+      rafId = requestAnimationFrame(tick);
+    } else {
+      applyPct(targetPct);
+      rafId = null;
+    }
+  }
+
+  function startDrag(clientX) {
+    const rect = wrap.getBoundingClientRect();
+    targetPct = Math.max(6, Math.min(94, (clientX - rect.left) / rect.width * 100));
+    if (!rafId) rafId = requestAnimationFrame(tick);
+  }
+
+  wrap.addEventListener('pointerdown', e => {
+    dragging = true;
+    wrap.setPointerCapture(e.pointerId);
+    startDrag(e.clientX);
+  });
+  wrap.addEventListener('pointermove', e => { if (dragging) startDrag(e.clientX); });
+  wrap.addEventListener('pointerup',     () => { dragging = false; });
+  wrap.addEventListener('pointercancel', () => { dragging = false; });
+
+  applyPct(50);
+}
+
+function initScrollLogic() {
+  cachedHero = document.getElementById('reachly-hero');
+  if (!cachedHero) return;
+
+  cachedBeats    = [...document.querySelectorAll('[data-beat]')];
+  cachedSb       = document.getElementById('scrollbar');
+  cachedControls = world ? world.controls() : null;
+  pinsOverlay    = document.getElementById('pins-overlay');
+  netOverlay     = document.getElementById('net-overlay');
+  netCanvas2d    = document.getElementById('net-canvas');
+  if (netCanvas2d) {
+    netCtx = netCanvas2d.getContext('2d');
+    const el = document.getElementById('reachly-globe');
+    if (el) {
+      netCanvas2d.width  = el.clientWidth;
+      netCanvas2d.height = el.clientHeight;
+      netCanvas2d.style.width  = el.clientWidth  + 'px';
+      netCanvas2d.style.height = el.clientHeight + 'px';
+    }
+  }
+
+  // Set --arch-end once so the archpulse translateX keyframe has a real distance
+  const archWrap = document.querySelector('.archwrap');
+  if (archWrap) {
+    archWrap.style.setProperty('--arch-end', archWrap.offsetWidth + 'px');
+  }
+
+  initB2BCanvas();
+  initB2CCanvas();
+  initAudCards();
+  initGapCanvas();
+  cacheLayout();
+  lastScrollY = window.scrollY;
+
+  // Scroll handler is now just two cheap assignments — zero DOM reads
+  window.addEventListener('scroll', () => {
+    lastScrollY = window.scrollY;
+    scrollDirty = true;
+  }, {passive: true});
+
+  // Debounced resize: re-measure layout values and globe size together
+  let resizeTimer;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      cacheLayout();
+      if (archWrap) archWrap.style.setProperty('--arch-end', archWrap.offsetWidth + 'px');
+      const el = document.getElementById('reachly-globe');
+      if (world && el) { world.width(el.clientWidth); world.height(el.clientHeight); }
+      if (netCanvas2d && el) {
+        netCanvas2d.width = el.clientWidth; netCanvas2d.height = el.clientHeight;
+        netCanvas2d.style.width = el.clientWidth + 'px'; netCanvas2d.style.height = el.clientHeight + 'px';
+      }
+      // Audience card scroll positions
+      if(audSection){ audSecTop=audSection.offsetTop; audScrollLen=Math.max(1,audSection.offsetHeight-window.innerHeight); }
+      // Gap canvas resize
+      if(gapCanvas){
+        gapW=window.innerWidth; gapH=window.innerHeight;
+        gapCanvas.width=Math.round(gapW*_DPR); gapCanvas.height=Math.round(gapH*_DPR);
+        gapCanvas.style.width=gapW+'px'; gapCanvas.style.height=gapH+'px';
+        gapCtx.setTransform(_DPR,0,0,_DPR,0,0);
+        const sec=document.getElementById('gap-section');
+        if(sec){ gapTop=sec.offsetTop; gapScrollLen=Math.max(1,sec.offsetHeight-window.innerHeight); }
+        precomputeGapPaths();
+        gapDirty=true;
+      }
+    }, 150);
+  });
+
+  // Kick off the single persistent loop and run once immediately
+  scrollDirty = true;
+  rafLoop();
+}
+
+/* ── Scroll-triggered reveals ──────────────────────────────────── */
+const io = new IntersectionObserver((entries) => {
+  entries.forEach(en => {
+    if (en.isIntersecting) {
+      en.target.classList.add('in');
+      /* Trigger line draws */
+      en.target.querySelectorAll('.line-draw').forEach(l => l.classList.add('in'));
+      /* Trigger counters */
+      en.target.querySelectorAll('[data-count-to]').forEach(el => animateCount(el));
+      io.unobserve(en.target);
+    }
+  });
+}, {threshold: 0.12});
+
+document.querySelectorAll('.fade, .fade-stagger, .slide-left, .slide-right, .scale-in').forEach(el => {
+  io.observe(el);
+});
+
+/* ── Counter animation ─────────────────────────────────────────── */
+function animateCount(el) {
+  const target = parseInt(el.dataset.countTo, 10);
+  const fmt = el.dataset.countFormat;
+  const prefix = el.dataset.countPrefix || '';
+  const start = performance.now();
+  const duration = 1800;
+  function tick(now) {
+    const t = Math.min(1, (now - start) / duration);
+    const eased = 1 - Math.pow(1 - t, 3);
+    const val = Math.round(eased * target);
+    if (fmt === 'M') {
+      el.textContent = (val / 1000000).toFixed(1) + 'M';
+    } else {
+      el.textContent = prefix + val.toLocaleString();
+    }
+    if (t < 1) requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+}
+
+/* Also observe count elements directly */
+document.querySelectorAll('[data-count-to]').forEach(el => {
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(en => {
+      if (en.isIntersecting) {
+        animateCount(en.target);
+        observer.unobserve(en.target);
+      }
+    });
+  }, {threshold: 0.5});
+  observer.observe(el);
+});
+
+/* ── Flow steps hover progress ─────────────────────────────────── */
+document.querySelectorAll('[data-step]').forEach(step => {
+  step.addEventListener('mouseenter', () => {
+    const n = parseInt(step.dataset.step, 10);
+    const bar = document.getElementById('flow-progress');
+    if (bar) bar.style.width = ((n / 4) * 100) + '%';
+  });
+});
+
+/* ── [removed: standalone canvas — now integrated into globe scroll] ── */
+(function _removed() { return; // dead code guard
+  const canvas = document.getElementById('user-net-canvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const DPR = Math.min(window.devicePixelRatio || 1, 2);
+
+  let W = 0, H = 0;
+
+  const CFG = {
+    B2B: { color:'#88BDA4', glow:'rgba(136,189,164,0.32)', r:20, zx:0.17, zy:0.50, sx:0.13, sy:0.36 },
+    B2C: { color:'#9484EC', glow:'rgba(148,132,236,0.32)', r:20, zx:0.83, zy:0.50, sx:0.13, sy:0.36 },
+    INV: { color:'#D8589B', glow:'rgba(216,88,155,0.32)',  r:22, zx:0.50, zy:0.22, sx:0.26, sy:0.13 },
+    CRE: { color:'#F2A340', glow:'rgba(242,163,64,0.32)',  r:18, zx:0.50, zy:0.79, sx:0.26, sy:0.13 }
+  };
+
+  const ROWS = [
+    {t:'B2B',n:'Ahmad S.',  s:'DevTools SaaS'},
+    {t:'B2B',n:'Sara K.',   s:'Fintech PaaS'},
+    {t:'B2B',n:'Omar K.',   s:'HR SaaS'},
+    {t:'B2B',n:'Rania T.',  s:'Analytics'},
+    {t:'B2B',n:'Karim A.',  s:'CRM Platform'},
+    {t:'B2B',n:'Dina H.',   s:'Logistics'},
+    {t:'B2B',n:'Nour F.',   s:'EdTech SaaS'},
+    {t:'B2B',n:'Tariq R.',  s:'Security'},
+    {t:'B2C',n:'Yasmine L.',s:'Social App'},
+    {t:'B2C',n:'Hassan B.', s:'Gaming'},
+    {t:'B2C',n:'Aya N.',    s:'E-commerce'},
+    {t:'B2C',n:'Ziad W.',   s:'Health App'},
+    {t:'B2C',n:'Hana S.',   s:'Travel'},
+    {t:'B2C',n:'Khalid J.', s:'Food Delivery'},
+    {t:'B2C',n:'Mona E.',   s:'Fashion'},
+    {t:'INV',n:'Venture MENA',s:'Series A–C'},
+    {t:'INV',n:'Gulf Capital',s:'Pre-seed'},
+    {t:'INV',n:'Horizon VC',  s:'Seed'},
+    {t:'INV',n:'TechAngels',  s:'Angel'},
+    {t:'INV',n:'MENA Fund',   s:'Series A'},
+    {t:'CRE',n:'Nadia T.',  s:'420K reach'},
+    {t:'CRE',n:'Ali B.',    s:'280K reach'},
+    {t:'CRE',n:'Sara A.',   s:'550K reach'},
+    {t:'CRE',n:'Yousef M.', s:'190K reach'},
+    {t:'CRE',n:'Haya K.',   s:'380K reach'}
+  ];
+
+  let nodes = [];
+
+  function initNodes() {
+    const idx = {B2B:0,B2C:0,INV:0,CRE:0};
+    const tot = {B2B:8,B2C:7,INV:5,CRE:5};
+    nodes = ROWS.map(d => {
+      const cfg = CFG[d.t];
+      const i = idx[d.t]++;
+      const n = tot[d.t];
+      const ang = (i / n) * Math.PI * 2 + (d.t==='B2B'?0.6:d.t==='B2C'?-0.4:0.2);
+      return {
+        ...d, cfg,
+        x: (cfg.zx + Math.cos(ang)*cfg.sx + (Math.random()-0.5)*0.05) * W,
+        y: (cfg.zy + Math.sin(ang)*cfg.sy + (Math.random()-0.5)*0.05) * H,
+        vx: (Math.random()-0.5)*0.4,
+        vy: (Math.random()-0.5)*0.4,
+        ph: Math.random()*Math.PI*2
+      };
+    });
+  }
+
+  function resize() {
+    W = canvas.offsetWidth || 800;
+    H = canvas.offsetHeight || 600;
+    canvas.width  = Math.round(W * DPR);
+    canvas.height = Math.round(H * DPR);
+    ctx.scale(DPR, DPR);
+    initNodes();
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  // Connections: [fromIdx, toIdx]
+  const CONNS = [
+    [0,15],[0,16],[1,15],[1,18],[2,16],[2,17],[3,17],[3,19],
+    [4,18],[4,15],[5,19],[5,16],[6,17],[7,18],
+    [8,20],[8,21],[9,21],[9,22],[10,22],[10,23],[11,23],[11,24],
+    [12,24],[12,20],[13,20],[14,21],[8,16],[10,17],[12,15]
+  ];
+  const TRACERS = CONNS.map(() => ({p:Math.random(), spd:0.0013+Math.random()*0.0014}));
+
+  let rafId = null;
+
+  function draw(ts) {
+    ctx.clearRect(0, 0, W, H);
+
+    // Background
+    const bg = ctx.createRadialGradient(W*.5,H*.44,0,W*.5,H*.5,Math.max(W,H)*.75);
+    bg.addColorStop(0,'#0e2030');
+    bg.addColorStop(1,'#060f18');
+    ctx.fillStyle = bg;
+    ctx.fillRect(0,0,W,H);
+
+    const now = ts * 0.001;
+
+    // Update positions
+    nodes.forEach(n => {
+      const zx = n.cfg.zx*W, zy = n.cfg.zy*H;
+      n.x += n.vx + Math.sin(now*0.38+n.ph)*0.07;
+      n.y += n.vy + Math.cos(now*0.31+n.ph*1.2)*0.055;
+      n.vx += (zx-n.x)*0.00022 + (Math.random()-0.5)*0.02;
+      n.vy += (zy-n.y)*0.00022 + (Math.random()-0.5)*0.02;
+      n.vx *= 0.97; n.vy *= 0.97;
+      n.x = Math.max(n.cfg.r+10, Math.min(W-n.cfg.r-10, n.x));
+      n.y = Math.max(n.cfg.r+22, Math.min(H-n.cfg.r-22, n.y));
+    });
+
+    // Draw connections + tracers
+    CONNS.forEach(([ai,bi],ci) => {
+      const a = nodes[ai], b = nodes[bi];
+      const tr = TRACERS[ci];
+      tr.p = (tr.p + tr.spd) % 1;
+
+      ctx.beginPath();
+      ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y);
+      ctx.strokeStyle = a.cfg.color+'24';
+      ctx.lineWidth = 0.9; ctx.stroke();
+
+      const tx = a.x+(b.x-a.x)*tr.p, ty = a.y+(b.y-a.y)*tr.p;
+      const tg = ctx.createRadialGradient(tx,ty,0,tx,ty,10);
+      tg.addColorStop(0,a.cfg.color+'bb');
+      tg.addColorStop(0.5,a.cfg.glow);
+      tg.addColorStop(1,'transparent');
+      ctx.beginPath(); ctx.arc(tx,ty,10,0,Math.PI*2);
+      ctx.fillStyle=tg; ctx.fill();
+      ctx.beginPath(); ctx.arc(tx,ty,2.8,0,Math.PI*2);
+      ctx.fillStyle=a.cfg.color; ctx.fill();
+    });
+
+    // Draw nodes
+    nodes.forEach(n => {
+      const r = n.cfg.r;
+      const pulse = 1 + 0.07*Math.sin(now*1.7+n.ph);
+      const gr = r*2.8*pulse;
+
+      const grd = ctx.createRadialGradient(n.x,n.y,r*.35,n.x,n.y,gr);
+      grd.addColorStop(0,n.cfg.glow.replace('0.32','0.48'));
+      grd.addColorStop(1,'transparent');
+      ctx.beginPath(); ctx.arc(n.x,n.y,gr,0,Math.PI*2);
+      ctx.fillStyle=grd; ctx.fill();
+
+      ctx.beginPath(); ctx.arc(n.x,n.y,r,0,Math.PI*2);
+      ctx.fillStyle=n.cfg.color+'1c'; ctx.fill();
+      ctx.strokeStyle=n.cfg.color; ctx.lineWidth=1.5; ctx.stroke();
+
+      ctx.fillStyle=n.cfg.color;
+      ctx.font=`bold 12px 'Space Grotesk',sans-serif`;
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText(n.n[0],n.x,n.y);
+
+      ctx.fillStyle='rgba(255,255,255,0.5)';
+      ctx.font=`9px 'IBM Plex Mono',monospace`;
+      ctx.fillText(n.n,n.x,n.y+r+12);
+
+      ctx.fillStyle='rgba(255,255,255,0.25)';
+      ctx.font=`8px 'IBM Plex Mono',monospace`;
+      ctx.fillText(n.s,n.x,n.y+r+22);
+    });
+
+    rafId = requestAnimationFrame(draw);
+  }
+
+  let active = false;
+  new IntersectionObserver(entries => {
+    entries.forEach(en => {
+      if (en.isIntersecting && !active) {
+        active = true; rafId = requestAnimationFrame(draw);
+      } else if (!en.isIntersecting && active) {
+        active = false;
+        if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+      }
+    });
+  }, {threshold:0.05}).observe(canvas);
+})();
+
+/* ── Mouse parallax on hero — rAF-gated so it never runs faster than display ── */
+(function() {
+  const globe = document.getElementById('reachly-globe');
+  if (!globe) return;
+  let mx = 0, my = 0, rafPending = false;
+  document.addEventListener('mousemove', (e) => {
+    mx = (e.clientX / window.innerWidth  - 0.5) * 6;
+    my = (e.clientY / window.innerHeight - 0.5) * 6;
+    if (!rafPending) {
+      rafPending = true;
+      requestAnimationFrame(() => {
+        globe.style.transform = `translate3d(${mx}px,${my}px,0)`;
+        rafPending = false;
+      });
+    }
+  }, {passive: true});
+})();
+</script>
+</body>
+</html>
