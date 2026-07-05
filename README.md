@@ -74,42 +74,6 @@ Reachly routes each user to the right workflow automatically:
 
 ---
 
-## Getting Started
-
-This project uses `pnpm`.
-
-```bash
-# Install dependencies
-pnpm install
-
-# Start the development server
-pnpm dev
-```
-
-Open [http://localhost:3000](http://localhost:3000) in your browser.
-
-### Required Environment Variables
-
-Create a `.env.local` file (or set variables in Vercel):
-
-| Variable | Purpose |
-|----------|---------|
-| `DATABASE_URL` | Neon Postgres connection string |
-| `BETTER_AUTH_SECRET` | Session signing secret |
-| `BETTER_AUTH_URL` | Auth base URL — must match your deployed domain |
-| `NEXT_PUBLIC_APP_URL` | Trusted origin for cookies — must match your deployed domain |
-| `OPENROUTER_API_KEY` | LLM access |
-| `APIFY_TOKEN` | Lead-scraping actor auth |
-| `APIFY_LEAD_ACTOR` | Override the default Apify actor (optional) |
-
-### Deploy Notes
-
-- Vercel does **not** read `.env.local`; add environment variables in the Vercel dashboard and redeploy.
-- `BETTER_AUTH_URL` and `NEXT_PUBLIC_APP_URL` must point at the real deployed domain — using `localhost` on production will break auth cookies.
-- Accounts live in the database referenced by `DATABASE_URL`, so local and production DBs are independent.
-
----
-
 ## Project Structure
 
 ```
